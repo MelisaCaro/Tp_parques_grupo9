@@ -463,7 +463,7 @@ GO
 
 -- maestros.TipoParque
 
-CREATE OR ALTER PROCEDURE sp_TipoParque_Insertar
+CREATE PROCEDURE sp_TipoParque_Insertar
     @nombre      VARCHAR(100),
     @descripcion VARCHAR(500) = NULL
 AS
@@ -491,7 +491,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_TipoParque_Actualizar
+CREATE PROCEDURE sp_TipoParque_Actualizar
     @idTipoParque INT,
     @nombre       VARCHAR(100),
     @descripcion  VARCHAR(500) = NULL
@@ -519,7 +519,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_TipoParque_Eliminar
+CREATE PROCEDURE sp_TipoParque_Eliminar
     @idTipoParque INT
 AS
 BEGIN
@@ -541,7 +541,7 @@ BEGIN
 END
 GO
 -- maestros.TipoVisitante
-CREATE OR ALTER PROCEDURE sp_TipoVisitante_Insertar
+CREATE PROCEDURE sp_TipoVisitante_Insertar
     @nombre       VARCHAR(100),
     @descuentoPct DECIMAL(5,2) = 0
 AS
@@ -569,7 +569,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_TipoVisitante_Actualizar
+CREATE PROCEDURE sp_TipoVisitante_Actualizar
     @idTipoVisitante INT,
     @nombre          VARCHAR(100),
     @descuentoPct    DECIMAL(5,2)
@@ -599,7 +599,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_TipoVisitante_Eliminar
+CREATE PROCEDURE sp_TipoVisitante_Eliminar
     @idTipoVisitante INT
 AS
 BEGIN
@@ -625,7 +625,7 @@ GO
 
 -- maestros.FormaPago
 
-CREATE OR ALTER PROCEDURE sp_FormaPago_Insertar
+CREATE PROCEDURE sp_FormaPago_Insertar
     @descripcion VARCHAR(100)
 AS
 BEGIN
@@ -648,7 +648,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_FormaPago_Actualizar
+CREATE PROCEDURE sp_FormaPago_Actualizar
     @idFormaPago INT,
     @descripcion VARCHAR(100)
 AS
@@ -673,7 +673,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_FormaPago_Eliminar
+CREATE PROCEDURE sp_FormaPago_Eliminar
     @idFormaPago INT
 AS
 BEGIN
@@ -697,7 +697,7 @@ GO
 
 -- parques.Parque
 
-CREATE OR ALTER PROCEDURE sp_Parque_Insertar
+CREATE PROCEDURE sp_Parque_Insertar
     @idTipoParque INT,
     @nombre       VARCHAR(200),
     @ubicacion    VARCHAR(300),
@@ -730,7 +730,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_Parque_Actualizar
+CREATE PROCEDURE sp_Parque_Actualizar
     @idParque     INT,
     @idTipoParque INT,
     @nombre       VARCHAR(200),
@@ -827,7 +827,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_Guardaparque_Actualizar
+CREATE PROCEDURE sp_Guardaparque_Actualizar
     @idGuardaparque INT,
     @nombre         VARCHAR(100),
     @apellido       VARCHAR(100),
@@ -863,7 +863,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE sp_Guardaparque_Eliminar
+CREATE PROCEDURE sp_Guardaparque_Eliminar
     @idGuardaparque INT
 AS
 BEGIN
@@ -884,3 +884,85 @@ BEGIN
     DELETE FROM parques.Guardaparque WHERE idGuardaparque = @idGuardaparque;
 END
 GO
+
+-- parques.AsignacionParque
+
+CREATE PROCEDURE sp_AsignacionParque_Insertar
+    @idGuardaparque INT,
+    @idParque       INT,
+    @fechaIngreso   DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM parques.Guardaparque WHERE idGuardaparque = @idGuardaparque)
+        SET @errores += '- El guardaparque indicado no existe.' + CHAR(13);
+    IF NOT EXISTS (SELECT 1 FROM parques.Parque WHERE idParque = @idParque AND activo = 1)
+        SET @errores += '- El parque indicado no existe o no esta activo.' + CHAR(13);
+    IF @fechaIngreso > CAST(GETDATE() AS DATE)
+        SET @errores += '- La fecha de ingreso no puede ser futura.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.AsignacionParque WHERE idGuardaparque = @idGuardaparque AND fechaEgreso IS NULL)
+        SET @errores += '- El guardaparque ya tiene una asignacion activa. Debe registrar su egreso antes de crear una nueva.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    INSERT INTO parques.AsignacionParque (idGuardaparque, idParque, fechaIngreso)
+    VALUES (@idGuardaparque, @idParque, @fechaIngreso);
+
+    SELECT SCOPE_IDENTITY() AS idAsignacion;
+END
+GO
+
+CREATE PROCEDURE sp_AsignacionParque_Cerrar
+    @idAsignacion INT,
+    @fechaEgreso  DATE,
+    @motivoEgreso VARCHAR(500) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+    DECLARE @fechaIngreso DATE;
+
+    SELECT @fechaIngreso = fechaIngreso
+    FROM parques.AsignacionParque
+    WHERE idAsignacion = @idAsignacion;
+
+    IF @fechaIngreso IS NULL
+        SET @errores += '- No existe una asignacion con el ID indicado.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.AsignacionParque WHERE idAsignacion = @idAsignacion AND fechaEgreso IS NOT NULL)
+        SET @errores += '- La asignacion ya fue cerrada.' + CHAR(13);
+    IF @fechaIngreso IS NOT NULL AND @fechaEgreso < @fechaIngreso
+        SET @errores += '- La fecha de egreso no puede ser anterior a la fecha de ingreso.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    UPDATE parques.AsignacionParque
+    SET fechaEgreso = @fechaEgreso, motivoEgreso = @motivoEgreso
+    WHERE idAsignacion = @idAsignacion;
+END
+GO
+
+
+/* VALIDACIONES HECHAS HASTA ACA (MIN 10)
+  --TIPO PARQUE
+	nombre obligatorio, nombre duplicado, no eliminar si tiene parques asociados
+   -TIPO VISITANTE
+	nombre obligatorio, descento entre 0 y 100, nombre duplicado, no eliminar si tiene visitas asociadas, no elim si precios de entradas asoc
+FORMA DE PAGO
+	descripcion obligatoria, descripcion duplicada,no elim si tiene tickets
+GUARDAPARQUE
+	nombre oblig, apellido oblig, dni oblig, dni dup, legajo dup, no eliminar si tiene asignacion activa
+ASIGNACION DE PARQUE
+	guardaparque existente, parques existentes y activos, no crear si tiene asignacion activa
+/*
+
+--falta sp de puntoventa, visitante, precio entrada, atraccion, precioatraccion, guia autorizado, habilitacionguia, tour, concesionario, consecion, pagoCanon, importacion log, condicion climatica
