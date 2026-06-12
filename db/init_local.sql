@@ -447,3 +447,440 @@ CREATE INDEX IX_Concesion_estado          ON concesiones.Concesion (estado);
 CREATE INDEX IX_PagoCanon_periodo         ON concesiones.PagoCanon (periodo);
 CREATE INDEX IX_Tour_fechaHoraInicio      ON atracciones.Tour (fechaHoraInicio);
 CREATE INDEX IX_AsignacionParque_idGuarda ON parques.AsignacionParque (idGuardaparque);
+
+
+/*
+============================================================
+  Fecha:       12/06/2026
+  Descripcion: Stored Procedures de ABM
+               Cada SP acumula todos los errores de validacion
+               en una variable y los reporta en un unico mensaje.
+============================================================
+*/
+
+USE ParquesNacionalesDB;
+GO
+
+-- maestros.TipoParque
+
+CREATE OR ALTER PROCEDURE sp_TipoParque_Insertar
+    @nombre      VARCHAR(100),
+    @descripcion VARCHAR(500) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '') IS NULL
+        SET @errores += '- El nombre del tipo de parque es obligatorio.' + CHAR(13);
+    IF LEN(LTRIM(RTRIM(ISNULL(@nombre,'')))) > 100
+        SET @errores += '- El nombre no puede superar los 100 caracteres.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM maestros.TipoParque WHERE nombre = @nombre)
+        SET @errores += '- Ya existe un tipo de parque con ese nombre.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    INSERT INTO maestros.TipoParque (nombre, descripcion)
+    VALUES (@nombre, @descripcion);
+
+    SELECT SCOPE_IDENTITY() AS idTipoParque;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_TipoParque_Actualizar
+    @idTipoParque INT,
+    @nombre       VARCHAR(100),
+    @descripcion  VARCHAR(500) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM maestros.TipoParque WHERE idTipoParque = @idTipoParque)
+        SET @errores += '- No existe un tipo de parque con el ID indicado.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '') IS NULL
+        SET @errores += '- El nombre es obligatorio.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM maestros.TipoParque WHERE nombre = @nombre AND idTipoParque <> @idTipoParque)
+        SET @errores += '- Ya existe otro tipo de parque con ese nombre.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    UPDATE maestros.TipoParque
+    SET nombre = @nombre, descripcion = @descripcion
+    WHERE idTipoParque = @idTipoParque;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_TipoParque_Eliminar
+    @idTipoParque INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM maestros.TipoParque WHERE idTipoParque = @idTipoParque)
+        SET @errores += '- No existe un tipo de parque con el ID indicado.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.Parque WHERE idTipoParque = @idTipoParque)
+        SET @errores += '- No se puede eliminar: existen parques asociados a este tipo.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    DELETE FROM maestros.TipoParque WHERE idTipoParque = @idTipoParque;
+END
+GO
+-- maestros.TipoVisitante
+CREATE OR ALTER PROCEDURE sp_TipoVisitante_Insertar
+    @nombre       VARCHAR(100),
+    @descuentoPct DECIMAL(5,2) = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '') IS NULL
+        SET @errores += '- El nombre es obligatorio.' + CHAR(13);
+    IF @descuentoPct < 0 OR @descuentoPct > 100
+        SET @errores += '- El descuento debe estar entre 0 y 100.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM maestros.TipoVisitante WHERE nombre = @nombre)
+        SET @errores += '- Ya existe un tipo de visitante con ese nombre.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    INSERT INTO maestros.TipoVisitante (nombre, descuentoPct)
+    VALUES (@nombre, @descuentoPct);
+
+    SELECT SCOPE_IDENTITY() AS idTipoVisitante;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_TipoVisitante_Actualizar
+    @idTipoVisitante INT,
+    @nombre          VARCHAR(100),
+    @descuentoPct    DECIMAL(5,2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM maestros.TipoVisitante WHERE idTipoVisitante = @idTipoVisitante)
+        SET @errores += '- No existe un tipo de visitante con el ID indicado.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '') IS NULL
+        SET @errores += '- El nombre es obligatorio.' + CHAR(13);
+    IF @descuentoPct < 0 OR @descuentoPct > 100
+        SET @errores += '- El descuento debe estar entre 0 y 100.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM maestros.TipoVisitante WHERE nombre = @nombre AND idTipoVisitante <> @idTipoVisitante)
+        SET @errores += '- Ya existe otro tipo de visitante con ese nombre.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    UPDATE maestros.TipoVisitante
+    SET nombre = @nombre, descuentoPct = @descuentoPct
+    WHERE idTipoVisitante = @idTipoVisitante;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_TipoVisitante_Eliminar
+    @idTipoVisitante INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM maestros.TipoVisitante WHERE idTipoVisitante = @idTipoVisitante)
+        SET @errores += '- No existe un tipo de visitante con el ID indicado.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM ventas.Visitante WHERE idTipoVisitante = @idTipoVisitante)
+        SET @errores += '- No se puede eliminar: existen visitantes asociados a este tipo.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idTipoVisitante = @idTipoVisitante)
+        SET @errores += '- No se puede eliminar: existen precios de entrada asociados a este tipo.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    DELETE FROM maestros.TipoVisitante WHERE idTipoVisitante = @idTipoVisitante;
+END
+GO
+
+-- maestros.FormaPago
+
+CREATE OR ALTER PROCEDURE sp_FormaPago_Insertar
+    @descripcion VARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NULLIF(LTRIM(RTRIM(@descripcion)), '') IS NULL
+        SET @errores += '- La descripcion es obligatoria.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM maestros.FormaPago WHERE descripcion = @descripcion)
+        SET @errores += '- Ya existe una forma de pago con esa descripcion.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    INSERT INTO maestros.FormaPago (descripcion) VALUES (@descripcion);
+    SELECT SCOPE_IDENTITY() AS idFormaPago;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_FormaPago_Actualizar
+    @idFormaPago INT,
+    @descripcion VARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM maestros.FormaPago WHERE idFormaPago = @idFormaPago)
+        SET @errores += '- No existe una forma de pago con el ID indicado.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@descripcion)), '') IS NULL
+        SET @errores += '- La descripcion es obligatoria.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM maestros.FormaPago WHERE descripcion = @descripcion AND idFormaPago <> @idFormaPago)
+        SET @errores += '- Ya existe otra forma de pago con esa descripcion.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    UPDATE maestros.FormaPago SET descripcion = @descripcion WHERE idFormaPago = @idFormaPago;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_FormaPago_Eliminar
+    @idFormaPago INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM maestros.FormaPago WHERE idFormaPago = @idFormaPago)
+        SET @errores += '- No existe una forma de pago con el ID indicado.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM ventas.Ticket WHERE idFormaPago = @idFormaPago)
+        SET @errores += '- No se puede eliminar: existen tickets que usan esta forma de pago.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    DELETE FROM maestros.FormaPago WHERE idFormaPago = @idFormaPago;
+END
+GO
+
+-- parques.Parque
+
+CREATE OR ALTER PROCEDURE sp_Parque_Insertar
+    @idTipoParque INT,
+    @nombre       VARCHAR(200),
+    @ubicacion    VARCHAR(300),
+    @superficieHa DECIMAL(12,2) = NULL,
+    @descripcion  VARCHAR(1000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '') IS NULL
+        SET @errores += '- El nombre del parque es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@ubicacion)), '') IS NULL
+        SET @errores += '- La ubicacion del parque es obligatoria.' + CHAR(13);
+    IF NOT EXISTS (SELECT 1 FROM maestros.TipoParque WHERE idTipoParque = @idTipoParque)
+        SET @errores += '- El tipo de parque indicado no existe.' + CHAR(13);
+    IF @superficieHa IS NOT NULL AND @superficieHa <= 0
+        SET @errores += '- La superficie debe ser mayor a cero.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    INSERT INTO parques.Parque (idTipoParque, nombre, ubicacion, superficieHa, descripcion, activo)
+    VALUES (@idTipoParque, @nombre, @ubicacion, @superficieHa, @descripcion, 1);
+
+    SELECT SCOPE_IDENTITY() AS idParque;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_Parque_Actualizar
+    @idParque     INT,
+    @idTipoParque INT,
+    @nombre       VARCHAR(200),
+    @ubicacion    VARCHAR(300),
+    @superficieHa DECIMAL(12,2) = NULL,
+    @descripcion  VARCHAR(1000) = NULL,
+    @activo       BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM parques.Parque WHERE idParque = @idParque)
+        SET @errores += '- No existe un parque con el ID indicado.' + CHAR(13);
+    IF NOT EXISTS (SELECT 1 FROM maestros.TipoParque WHERE idTipoParque = @idTipoParque)
+        SET @errores += '- El tipo de parque indicado no existe.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '') IS NULL
+        SET @errores += '- El nombre del parque es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@ubicacion)), '') IS NULL
+        SET @errores += '- La ubicacion es obligatoria.' + CHAR(13);
+    IF @superficieHa IS NOT NULL AND @superficieHa <= 0
+        SET @errores += '- La superficie debe ser mayor a cero.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    UPDATE parques.Parque
+    SET idTipoParque = @idTipoParque, nombre = @nombre, ubicacion = @ubicacion,
+        superficieHa = @superficieHa, descripcion = @descripcion, activo = @activo
+    WHERE idParque = @idParque;
+END
+GO
+
+CREATE PROCEDURE sp_Parque_Eliminar
+    @idParque INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM parques.Parque WHERE idParque = @idParque)
+        SET @errores += '- No existe un parque con el ID indicado.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM ventas.Entrada WHERE idParque = @idParque)
+        SET @errores += '- No se puede eliminar: el parque tiene entradas registradas. Use la baja logica (activo = 0).' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM concesiones.Concesion WHERE idParque = @idParque)
+        SET @errores += '- No se puede eliminar: el parque tiene concesiones asociadas.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    UPDATE parques.Parque SET activo = 0 WHERE idParque = @idParque;
+END
+GO
+
+-- parques.Guardaparque
+
+CREATE PROCEDURE sp_Guardaparque_Insertar
+    @nombre   VARCHAR(100),
+    @apellido VARCHAR(100),
+    @dni      VARCHAR(20),
+    @legajo   VARCHAR(50),
+    @email    VARCHAR(150) = NULL,
+    @telefono VARCHAR(50)  = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '')   IS NULL SET @errores += '- El nombre es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@apellido)), '') IS NULL SET @errores += '- El apellido es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@dni)), '')      IS NULL SET @errores += '- El DNI es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@legajo)), '')   IS NULL SET @errores += '- El legajo es obligatorio.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.Guardaparque WHERE dni    = @dni)
+        SET @errores += '- Ya existe un guardaparque con ese DNI.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.Guardaparque WHERE legajo = @legajo)
+        SET @errores += '- Ya existe un guardaparque con ese legajo.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    INSERT INTO parques.Guardaparque (nombre, apellido, dni, legajo, email, telefono)
+    VALUES (@nombre, @apellido, @dni, @legajo, @email, @telefono);
+
+    SELECT SCOPE_IDENTITY() AS idGuardaparque;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_Guardaparque_Actualizar
+    @idGuardaparque INT,
+    @nombre         VARCHAR(100),
+    @apellido       VARCHAR(100),
+    @dni            VARCHAR(20),
+    @legajo         VARCHAR(50),
+    @email          VARCHAR(150) = NULL,
+    @telefono       VARCHAR(50)  = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM parques.Guardaparque WHERE idGuardaparque = @idGuardaparque)
+        SET @errores += '- No existe un guardaparque con el ID indicado.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '')   IS NULL SET @errores += '- El nombre es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@apellido)), '') IS NULL SET @errores += '- El apellido es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@dni)), '')      IS NULL SET @errores += '- El DNI es obligatorio.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.Guardaparque WHERE dni    = @dni    AND idGuardaparque <> @idGuardaparque)
+        SET @errores += '- Otro guardaparque ya tiene ese DNI.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.Guardaparque WHERE legajo = @legajo AND idGuardaparque <> @idGuardaparque)
+        SET @errores += '- Otro guardaparque ya tiene ese legajo.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    UPDATE parques.Guardaparque
+    SET nombre = @nombre, apellido = @apellido, dni = @dni,
+        legajo = @legajo, email = @email, telefono = @telefono
+    WHERE idGuardaparque = @idGuardaparque;
+END
+GO
+
+CREATE OR ALTER PROCEDURE sp_Guardaparque_Eliminar
+    @idGuardaparque INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM parques.Guardaparque WHERE idGuardaparque = @idGuardaparque)
+        SET @errores += '- No existe un guardaparque con el ID indicado.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.AsignacionParque WHERE idGuardaparque = @idGuardaparque AND fechaEgreso IS NULL)
+        SET @errores += '- El guardaparque tiene una asignacion activa. Debe registrar su egreso antes de eliminarlo.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    DELETE FROM parques.Guardaparque WHERE idGuardaparque = @idGuardaparque;
+END
+GO
