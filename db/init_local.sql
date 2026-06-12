@@ -24,32 +24,11 @@ GO
 CREATE DATABASE ParquesNacionalesDB;
 GO
  
-USE ParquesNacionalesDB;
-GO
-
 /*
 ============================================================
   Fecha:      12/6/2026
   Descripcion: Creación de esquemas, tablas, PKs, FKs y
-               restricciones del sistema de Parques Nacionales.
-  Esquemas definidos:
-    - maestros:     Tablas de referencia y configuracion
-    - parques:      Gestion de parques y personal
-    - ventas:       Tickets, entradas y pagos
-    - atracciones:  Atracciones, tours y guias
-    - concesiones:  Concesionarios, concesiones y canon
-    - importacion:  Log de importaciones y clima
-============================================================
-*/
-
-USE ParquesNacionalesDB;
-GO
-
-
-/*
-============================================================
-  Fecha:      12/6/2026
-  Esquemas definidos:
+            restricciones del sistema de Parques Nacionales.
     - maestros:     Tablas de referencia y configuracion
     - parques:      Gestion de parques y personal
     - ventas:       Tickets, entradas y pagos
