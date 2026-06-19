@@ -1699,12 +1699,23 @@ BEGIN
     WHERE idConcesion = @idConcesion;
 END
 GO
+CREATE PROCEDURE sp_ActualizarEstadoConcesiones
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE concesiones.Concesion
+    SET estado = 'Vencida'
+    WHERE estado  = 'Vigente'
+      AND fechaFin < CAST(GETDATE() AS DATE);
+
+    SELECT @@ROWCOUNT AS concesionesActualizadas;
+END
+GO
 
 
 -- concesiones.PagoCanon
-
-
-CREATE PROCEDURE sp_PagoCanon_Insertar
+/*--drop PROCEDURE sp_PagoCanon_Insertar DUP
     @idConcesion INT,
     @idFormaPago INT,
     @fechaPago   DATE,
@@ -1741,7 +1752,7 @@ BEGIN
     SELECT SCOPE_IDENTITY() AS idPago;
 END
 GO
-
+*/
 
 -- importacion.ImportacionLog
 
