@@ -672,3 +672,232 @@ BEGIN
     END CATCH
 END
 GO
+
+
+--INSERTAR ARCHIVO
+
+/*
+  Descripcion: Importacion de Areas Protegidas Nacionales
+               desde el archivo aprn_f_defensa_2026.csv.
+               Fuente: datos.gob.ar / APN Argentina
+               Formato: CSV separado por punto y coma, con
+               comillas en los valores.
+               Implementa logica Upsert: inserta si el nombre
+               no existe, actualiza si ya existe.
+               Registra resultados en importacion.ImportacionLog.
+*/
+USE ParquesNacionalesDB;
+GO
+
+-- TABLA DE STAGING
+-- Recibe los datos crudos del CSV exactamente como vienen.
+-- Se trunca antes de cada importacion.
+
+CREATE TABLE importacion.STG_APRN (
+    nombre             VARCHAR(300) NULL,
+    provincia          VARCHAR(200) NULL,
+    creacion           VARCHAR(10)  NULL,
+    hectareas          VARCHAR(20)  NULL,
+    ambiente_protegido VARCHAR(200) NULL
+);
+GO
+
+-- SP DE IMPORTACION
+
+
+
+CREATE OR ALTER PROCEDURE sp_Importar_APRN
+    @rutaArchivo VARCHAR(500)
+AS
+BEGIN
+    SET NOCOUNT ON;
+ 
+    DECLARE @idImportacion  INT;
+    DECLARE @procesados     INT = 0;
+    DECLARE @ok             INT = 0;
+    DECLARE @errores        INT = 0;
+    DECLARE @sql            VARCHAR(1000);
+ 
+    -- Registrar inicio en log
+    INSERT INTO importacion.ImportacionLog (idParque, fuente, formato, fechaEjecucion, estado)
+    VALUES (NULL, @rutaArchivo, 'CSV', GETDATE(), 'EnProceso');
+ 
+    SET @idImportacion = SCOPE_IDENTITY();
+ 
+    -- Limpiar staging
+    TRUNCATE TABLE importacion.STG_APRN;
+ 
+    -- Cargar CSV en staging
+    -- Separador: punto y coma. Tiene comillas. Saltear encabezado (FIRSTROW = 2)
+    SET @sql = '
+        BULK INSERT importacion.STG_APRN
+        FROM ''' + @rutaArchivo + '''
+        WITH (
+            FIRSTROW        = 2,
+            FIELDTERMINATOR = '';'',
+            ROWTERMINATOR   = ''0x0a'',
+            TABLOCK
+        )';
+ 
+    BEGIN TRY
+        EXEC(@sql);
+    END TRY
+    BEGIN CATCH
+        UPDATE importacion.ImportacionLog
+        SET estado = 'Fallido', registrosProcesados = 0, registrosOk = 0, registrosError = 0
+        WHERE idImportacion = @idImportacion;
+ 
+        RAISERROR('- Error al leer el archivo. Verifique la ruta y el formato del CSV.', 16, 1);
+        RETURN;
+    END CATCH
+ 
+    -- Contar registros validos en staging
+    SELECT @procesados = COUNT(*)
+    FROM importacion.STG_APRN
+    WHERE NULLIF(LTRIM(RTRIM(nombre)), '') IS NOT NULL;
+ 
+    -- ============================================================
+    -- PROCESAMIENTO CON MANEJO DE ERRORES PARCIALES
+    -- ============================================================
+ 
+    DECLARE @nombre      VARCHAR(300);
+    DECLARE @provincia   VARCHAR(200);
+    DECLARE @creacion    VARCHAR(10);
+    DECLARE @hectareas   VARCHAR(20);
+    DECLARE @ambiente    VARCHAR(200);
+    DECLARE @superficie  DECIMAL(12,2);
+    DECLARE @idTipo      INT;
+    DECLARE @idParque    INT;
+    DECLARE @descripcion VARCHAR(1000);
+ 
+    DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
+        SELECT
+            REPLACE(LTRIM(RTRIM(nombre)),           '"', ''),
+            REPLACE(LTRIM(RTRIM(provincia)),         '"', ''),
+            REPLACE(LTRIM(RTRIM(creacion)),          '"', ''),
+            REPLACE(LTRIM(RTRIM(hectareas)),         '"', ''),
+            REPLACE(LTRIM(RTRIM(ambiente_protegido)),'"', '')
+        FROM importacion.STG_APRN
+        WHERE NULLIF(LTRIM(RTRIM(nombre)), '') IS NOT NULL;
+ 
+    OPEN cur;
+    FETCH NEXT FROM cur INTO @nombre, @provincia, @creacion, @hectareas, @ambiente;
+ 
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        BEGIN TRY
+ 
+            -- Validar que hectareas sea numerico
+            IF ISNUMERIC(@hectareas) = 0
+            BEGIN
+                SET @errores += 1;
+                FETCH NEXT FROM cur INTO @nombre, @provincia, @creacion, @hectareas, @ambiente;
+                CONTINUE;
+            END
+ 
+            SET @superficie  = CAST(@hectareas AS DECIMAL(12,2));
+            SET @descripcion = 'Creacion: ' + ISNULL(@creacion, 'S/D')
+                             + ' | Ambiente: ' + ISNULL(@ambiente, 'S/D')
+                             + ' | Fuente: APN Argentina';
+ 
+            -- Resolver TipoParque como "Area Natural Protegida"
+            SELECT @idTipo = idTipoParque
+            FROM maestros.TipoParque
+            WHERE nombre = 'Area Natural Protegida';
+ 
+            IF @idTipo IS NULL
+            BEGIN
+                INSERT INTO maestros.TipoParque (nombre, descripcion)
+                VALUES ('Area Natural Protegida', 'Importado desde dataset APN');
+                SET @idTipo = SCOPE_IDENTITY();
+            END
+ 
+            -- Buscar si ya existe por nombre exacto
+            SELECT @idParque = idParque
+            FROM parques.Parque
+            WHERE nombre = @nombre;
+ 
+            IF @idParque IS NULL
+            BEGIN
+                -- INSERT
+                INSERT INTO parques.Parque
+                    (idTipoParque, nombre, ubicacion, superficieHa, descripcion, activo)
+                VALUES
+                    (@idTipo, @nombre, @provincia, @superficie, @descripcion, 1);
+            END
+            ELSE
+            BEGIN
+                -- UPDATE
+                UPDATE parques.Parque
+                SET ubicacion    = @provincia,
+                    superficieHa = @superficie,
+                    descripcion  = @descripcion,
+                    idTipoParque = @idTipo
+                WHERE idParque = @idParque;
+            END
+ 
+            SET @ok += 1;
+ 
+        END TRY
+        BEGIN CATCH
+            SET @errores += 1;
+        END CATCH
+ 
+        SET @idTipo   = NULL;
+        SET @idParque = NULL;
+ 
+        FETCH NEXT FROM cur INTO @nombre, @provincia, @creacion, @hectareas, @ambiente;
+    END
+ 
+    CLOSE cur;
+    DEALLOCATE cur;
+ 
+    -- Actualizar log
+    UPDATE importacion.ImportacionLog
+    SET registrosProcesados = @procesados,
+        registrosOk         = @ok,
+        registrosError      = @errores,
+        estado              = CASE
+                                WHEN @errores = 0 THEN 'Completado'
+                                WHEN @ok = 0      THEN 'Fallido'
+                                ELSE                   'CompletadoConErrores'
+                              END
+    WHERE idImportacion = @idImportacion;
+ 
+    SELECT
+        @procesados AS registrosProcesados,
+        @ok         AS registrosOk,
+        @errores    AS registrosConError,
+        CASE
+            WHEN @errores = 0 THEN 'Completado'
+            WHEN @ok = 0      THEN 'Fallido'
+            ELSE                   'CompletadoConErrores'
+        END AS estado;
+END
+GO
+SELECT * FROM importacion.STG_APRN;
+
+EXEC sp_Importar_APRN 'C:\Datasets\aprn_f_defensa_2026.csv'; --subo el archivo
+
+select* from importacion.ImportacionLog
+SELECT TOP 3 
+    nombre, 
+    hectareas,
+    ISNUMERIC(hectareas) AS es_numerico,
+    LEN(nombre) AS largo_nombre
+FROM importacion.STG_APRN;
+
+--pruebo si carga algo
+TRUNCATE TABLE importacion.STG_APRN;
+
+BULK INSERT importacion.STG_APRN
+FROM 'C:\Datasets\aprn_f_defensa_2026.csv'
+WITH (
+    FIRSTROW        = 2,
+    FIELDTERMINATOR = ';',
+    ROWTERMINATOR   = '0x0a',
+    TABLOCK
+);
+
+SELECT COUNT(*) AS filas FROM importacion.STG_APRN;
+SELECT TOP 3 * FROM importacion.STG_APRN;
