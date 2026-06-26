@@ -1406,3 +1406,156 @@ BEGIN
     SELECT SCOPE_IDENTITY() AS idCondicion;
 END
 GO
+/*
+============================================================
+  fecha 26/6
+  Descripcion: Agrega columnas de geolocalizacion (latitud y
+               longitud) a parques.Parque.
+               Requerido para:
+                 - Consultar clima via API 
+                 - Mostrar mapa de parques 
+               Tambien actualiza sp_Parque_Insertar y
+               sp_Parque_Actualizar para aceptar estos nuevos campos.
+============================================================
+*/
+
+USE ParquesNacionalesDB;
+GO
+
+
+-- 1. Agregar columnas a parques.Parque
+
+
+    ALTER TABLE parques.Parque ADD latitud DECIMAL(9,6) NULL;
+
+
+
+    ALTER TABLE parques.Parque ADD longitud DECIMAL(9,6) NULL;
+
+
+-- 2. Cargar coordenadas de los 10 parques del seed
+-- Fuente: IGN Argentina / Wikipedia
+
+
+UPDATE parques.Parque SET latitud = -41.0569, longitud = -71.5350 WHERE nombre = 'Nahuel Huapi';
+UPDATE parques.Parque SET latitud = -25.6868, longitud = -54.4444 WHERE nombre = 'Iguazu';
+UPDATE parques.Parque SET latitud = -50.3588, longitud = -73.0368 WHERE nombre = 'Los Glaciares';
+UPDATE parques.Parque SET latitud = -29.8261, longitud = -67.8736 WHERE nombre = 'Talampaya';
+UPDATE parques.Parque SET latitud = -31.8610, longitud = -58.2680 WHERE nombre = 'El Palmar';
+UPDATE parques.Parque SET latitud = -39.6237, longitud = -71.4697 WHERE nombre = 'Lanin';
+UPDATE parques.Parque SET latitud = -30.7041, longitud = -64.1023 WHERE nombre = 'Cerro Colorado';
+UPDATE parques.Parque SET latitud = -31.7167, longitud = -64.7167 WHERE nombre = 'Quebrada del Condorito';
+UPDATE parques.Parque SET latitud = -22.3833, longitud = -65.9833 WHERE nombre = 'Laguna de los Pozuelos';
+UPDATE parques.Parque SET latitud = -42.8833, longitud = -71.8333 WHERE nombre = 'Los Alerces';
+GO
+
+
+-- 3. Actualizar sp_Parque_Insertar para aceptar lat/lon
+
+
+ALTER PROCEDURE sp_Parque_Insertar
+    @idTipoParque INT,
+    @nombre       VARCHAR(200),
+    @ubicacion    VARCHAR(300),
+    @superficieHa DECIMAL(12,2) = NULL,
+    @descripcion  VARCHAR(1000) = NULL,
+    @latitud      DECIMAL(9,6)  = NULL,
+    @longitud     DECIMAL(9,6)  = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM maestros.TipoParque WHERE idTipoParque = @idTipoParque)
+        SET @errores += '- El tipo de parque indicado no existe.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '') IS NULL
+        SET @errores += '- El nombre del parque es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@ubicacion)), '') IS NULL
+        SET @errores += '- La ubicacion es obligatoria.' + CHAR(13);
+    IF @superficieHa IS NOT NULL AND @superficieHa <= 0
+        SET @errores += '- La superficie debe ser mayor a cero.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.Parque WHERE nombre = @nombre)
+        SET @errores += '- Ya existe un parque con ese nombre.' + CHAR(13);
+    IF @latitud IS NOT NULL AND (@latitud < -90 OR @latitud > 90)
+        SET @errores += '- La latitud debe estar entre -90 y 90.' + CHAR(13);
+    IF @longitud IS NOT NULL AND (@longitud < -180 OR @longitud > 180)
+        SET @errores += '- La longitud debe estar entre -180 y 180.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    INSERT INTO parques.Parque
+        (idTipoParque, nombre, ubicacion, superficieHa, descripcion, activo, latitud, longitud)
+    VALUES
+        (@idTipoParque, @nombre, @ubicacion, @superficieHa, @descripcion, 1, @latitud, @longitud);
+
+    SELECT SCOPE_IDENTITY() AS idParque;
+END
+GO
+
+
+-- 4. Actualizar sp_Parque_Actualizar para aceptar lat/lon
+
+
+ALTER PROCEDURE sp_Parque_Actualizar
+    @idParque     INT,
+    @idTipoParque INT,
+    @nombre       VARCHAR(200),
+    @ubicacion    VARCHAR(300),
+    @superficieHa DECIMAL(12,2) = NULL,
+    @descripcion  VARCHAR(1000) = NULL,
+    @activo       BIT           = 1,
+    @latitud      DECIMAL(9,6)  = NULL,
+    @longitud     DECIMAL(9,6)  = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores VARCHAR(MAX) = '';
+
+    IF NOT EXISTS (SELECT 1 FROM parques.Parque WHERE idParque = @idParque)
+        SET @errores += '- No existe un parque con el ID indicado.' + CHAR(13);
+    IF NOT EXISTS (SELECT 1 FROM maestros.TipoParque WHERE idTipoParque = @idTipoParque)
+        SET @errores += '- El tipo de parque indicado no existe.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@nombre)), '') IS NULL
+        SET @errores += '- El nombre es obligatorio.' + CHAR(13);
+    IF NULLIF(LTRIM(RTRIM(@ubicacion)), '') IS NULL
+        SET @errores += '- La ubicacion es obligatoria.' + CHAR(13);
+    IF @superficieHa IS NOT NULL AND @superficieHa <= 0
+        SET @errores += '- La superficie debe ser mayor a cero.' + CHAR(13);
+    IF EXISTS (SELECT 1 FROM parques.Parque WHERE nombre = @nombre AND idParque <> @idParque)
+        SET @errores += '- Ya existe otro parque con ese nombre.' + CHAR(13);
+    IF @latitud IS NOT NULL AND (@latitud < -90 OR @latitud > 90)
+        SET @errores += '- La latitud debe estar entre -90 y 90.' + CHAR(13);
+    IF @longitud IS NOT NULL AND (@longitud < -180 OR @longitud > 180)
+        SET @errores += '- La longitud debe estar entre -180 y 180.' + CHAR(13);
+
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+
+    UPDATE parques.Parque
+    SET idTipoParque = @idTipoParque,
+        nombre       = @nombre,
+        ubicacion    = @ubicacion,
+        superficieHa = @superficieHa,
+        descripcion  = @descripcion,
+        activo       = @activo,
+        latitud      = @latitud,
+        longitud     = @longitud
+    WHERE idParque = @idParque;
+END
+GO
+
+
+-- Verificacion
+
+SELECT idParque, nombre, latitud, longitud
+FROM parques.Parque
+WHERE latitud IS NOT NULL
+ORDER BY nombre;
+
