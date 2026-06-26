@@ -26,9 +26,10 @@ permisos:
 USE ParquesNacionalesDB;
 GO
 
--- ============================================================
+
+
 -- CREACION DE ROLES
--- ============================================================
+
 
 CREATE ROLE rol_admin;
 GO
@@ -39,10 +40,11 @@ GO
 CREATE ROLE rol_importador;
 GO
 
-/* rol_admin
-puede ejecutar todos los SPs y acceder
-directamente a todas las tablas.
-*/
+
+-- ROL: rol_admin
+-- Acceso total: ejecuta todos los SPs y puede consultar
+-- tablas directamente.
+
 
 GRANT EXECUTE ON SCHEMA::maestros    TO rol_admin;
 GRANT EXECUTE ON SCHEMA::parques     TO rol_admin;
@@ -50,86 +52,127 @@ GRANT EXECUTE ON SCHEMA::ventas      TO rol_admin;
 GRANT EXECUTE ON SCHEMA::atracciones TO rol_admin;
 GRANT EXECUTE ON SCHEMA::concesiones TO rol_admin;
 GRANT EXECUTE ON SCHEMA::importacion TO rol_admin;
+GRANT EXECUTE ON SCHEMA::dbo         TO rol_admin;
 
-GRANT SELECT ON SCHEMA::maestros    TO rol_admin;
-GRANT SELECT ON SCHEMA::parques     TO rol_admin;
-GRANT SELECT ON SCHEMA::ventas      TO rol_admin;
-GRANT SELECT ON SCHEMA::atracciones TO rol_admin;
-GRANT SELECT ON SCHEMA::concesiones TO rol_admin;
-GRANT SELECT ON SCHEMA::importacion TO rol_admin;
+GRANT SELECT ON SCHEMA::maestros     TO rol_admin;
+GRANT SELECT ON SCHEMA::parques      TO rol_admin;
+GRANT SELECT ON SCHEMA::ventas       TO rol_admin;
+GRANT SELECT ON SCHEMA::atracciones  TO rol_admin;
+GRANT SELECT ON SCHEMA::concesiones  TO rol_admin;
+GRANT SELECT ON SCHEMA::importacion  TO rol_admin;
 GO
 
 
-/* rol_ventas
-Puede registrar ventas de entradas, contratar tours
-y consultar parques, precios y visitantes.
-No puede acceder directamente a las tablas.
-*/
+-- ROL: rol_ventas
+-- Ejecuta SPs de logica de negocio y ABM de visitantes
+-- y puntos de venta. No accede directamente a tablas.
 
--- SPs de negocio de ventas
-GRANT EXECUTE ON sp_VentaEntradas         TO rol_ventas;
-GRANT EXECUTE ON sp_ContratarActividad    TO rol_ventas;
-GRANT EXECUTE ON sp_AsignarGuiaATour      TO rol_ventas;
+
+-- SPs de logica de negocio (estan en dbo)
+GRANT EXECUTE ON OBJECT::dbo.sp_VentaEntradas         TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_ContratarActividad    TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_AsignarGuiaATour      TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_AnularTicket          TO rol_ventas;
 
 -- SPs ABM necesarios para operar
-GRANT EXECUTE ON sp_Visitante_Insertar    TO rol_ventas;
-GRANT EXECUTE ON sp_Visitante_Actualizar  TO rol_ventas;
-GRANT EXECUTE ON sp_PuntoVenta_Insertar   TO rol_ventas;
-GRANT EXECUTE ON sp_PuntoVenta_Actualizar TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_Visitante_Insertar    TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_Visitante_Actualizar  TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_PuntoVenta_Insertar   TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_PuntoVenta_Actualizar TO rol_ventas;
 
--- Denegar acceso directo a todas las tablas
-DENY SELECT ON SCHEMA::ventas      TO rol_ventas;
-DENY SELECT ON SCHEMA::maestros    TO rol_ventas;
-DENY SELECT ON SCHEMA::parques     TO rol_ventas;
-DENY SELECT ON SCHEMA::atracciones TO rol_ventas;
-DENY SELECT ON SCHEMA::concesiones TO rol_ventas;
+-- Denegar DML directo (DENY es correcto aqui: nunca debe
+-- hacerse INSERT/UPDATE/DELETE directo sobre las tablas)
+DENY INSERT ON SCHEMA::ventas      TO rol_ventas;
+DENY INSERT ON SCHEMA::maestros    TO rol_ventas;
+DENY INSERT ON SCHEMA::parques     TO rol_ventas;
+DENY INSERT ON SCHEMA::atracciones TO rol_ventas;
+DENY INSERT ON SCHEMA::concesiones TO rol_ventas;
+
+DENY UPDATE ON SCHEMA::ventas      TO rol_ventas;
+DENY UPDATE ON SCHEMA::maestros    TO rol_ventas;
+DENY UPDATE ON SCHEMA::parques     TO rol_ventas;
+DENY UPDATE ON SCHEMA::atracciones TO rol_ventas;
+DENY UPDATE ON SCHEMA::concesiones TO rol_ventas;
+
+DENY DELETE ON SCHEMA::ventas      TO rol_ventas;
+DENY DELETE ON SCHEMA::maestros    TO rol_ventas;
+DENY DELETE ON SCHEMA::parques     TO rol_ventas;
+DENY DELETE ON SCHEMA::atracciones TO rol_ventas;
+DENY DELETE ON SCHEMA::concesiones TO rol_ventas;
+
+-- SELECT directo: no se otorga (REVOKE implicito).
 GO
 
 
-/* rol_consulta
-Solo puede ejecutar SPs de reportes.
-No puede modificar datos ni acceder a tablas directamente.
-*/
+-- ROL: rol_consulta
+-- Solo ejecuta SPs de reportes. No modifica datos
+-- ni accede directamente a tablas.
 
-GRANT EXECUTE ON sp_ReporteVisitasPorPeriodo      TO rol_consulta;
-GRANT EXECUTE ON sp_ReporteIngresosPorParqueXML   TO rol_consulta;
-GRANT EXECUTE ON sp_ReporteDeudores               TO rol_consulta;
-GRANT EXECUTE ON sp_MatrizVisitas                 TO rol_consulta;
-GRANT EXECUTE ON sp_ReporteParquesYConcesionesXML TO rol_consulta;
 
-DENY SELECT ON SCHEMA::ventas      TO rol_consulta;
-DENY SELECT ON SCHEMA::maestros    TO rol_consulta;
-DENY SELECT ON SCHEMA::parques     TO rol_consulta;
-DENY SELECT ON SCHEMA::atracciones TO rol_consulta;
-DENY SELECT ON SCHEMA::concesiones TO rol_consulta;
-DENY SELECT ON SCHEMA::importacion TO rol_consulta;
+GRANT EXECUTE ON OBJECT::dbo.sp_ReporteVisitasPorPeriodo      TO rol_consulta;
+GRANT EXECUTE ON OBJECT::dbo.sp_ReporteIngresosPorParqueXML   TO rol_consulta;
+GRANT EXECUTE ON OBJECT::dbo.sp_ReporteDeudores               TO rol_consulta;
+GRANT EXECUTE ON OBJECT::dbo.sp_MatrizVisitas                 TO rol_consulta;
+GRANT EXECUTE ON OBJECT::dbo.sp_ReporteParquesYConcesionesXML TO rol_consulta;
+
+DENY INSERT ON SCHEMA::ventas      TO rol_consulta;
+DENY INSERT ON SCHEMA::maestros    TO rol_consulta;
+DENY INSERT ON SCHEMA::parques     TO rol_consulta;
+DENY INSERT ON SCHEMA::atracciones TO rol_consulta;
+DENY INSERT ON SCHEMA::concesiones TO rol_consulta;
+DENY INSERT ON SCHEMA::importacion TO rol_consulta;
+
+DENY UPDATE ON SCHEMA::ventas      TO rol_consulta;
+DENY UPDATE ON SCHEMA::maestros    TO rol_consulta;
+DENY UPDATE ON SCHEMA::parques     TO rol_consulta;
+DENY UPDATE ON SCHEMA::atracciones TO rol_consulta;
+DENY UPDATE ON SCHEMA::concesiones TO rol_consulta;
+DENY UPDATE ON SCHEMA::importacion TO rol_consulta;
+
+DENY DELETE ON SCHEMA::ventas      TO rol_consulta;
+DENY DELETE ON SCHEMA::maestros    TO rol_consulta;
+DENY DELETE ON SCHEMA::parques     TO rol_consulta;
+DENY DELETE ON SCHEMA::atracciones TO rol_consulta;
+DENY DELETE ON SCHEMA::concesiones TO rol_consulta;
+DENY DELETE ON SCHEMA::importacion TO rol_consulta;
+
+-- SELECT directo: no se otorga (sin DENY para no romper SPs)
 GO
 
 
-/*rol_importador
--- Solo puede ejecutar SPs de importacion de datasets.
--- No puede modificar datos del negocio ni ver reportes.
-*/
+-- ROL: rol_importador
+-- Solo ejecuta SPs de importacion masiva.
+-- Sin DENY en maestros, parques ni importacion porque los
+-- SPs de importacion hacen upsert en esos schemas internamente.
 
-GRANT EXECUTE ON sp_ImportarWDPA  TO rol_importador;
-GRANT EXECUTE ON sp_Importar_APRN  TO rol_importador;
 
-DENY SELECT ON SCHEMA::ventas      TO rol_importador;
-DENY SELECT ON SCHEMA::maestros    TO rol_importador;
-DENY SELECT ON SCHEMA::parques     TO rol_importador;
-DENY SELECT ON SCHEMA::atracciones TO rol_importador;
-DENY SELECT ON SCHEMA::concesiones TO rol_importador;
-DENY SELECT ON SCHEMA::importacion TO rol_importador;
+GRANT EXECUTE ON OBJECT::dbo.sp_ImportarWDPA   TO rol_importador;
+GRANT EXECUTE ON OBJECT::dbo.sp_Importar_APRN  TO rol_importador;
+
+DENY INSERT ON SCHEMA::ventas      TO rol_importador;
+DENY INSERT ON SCHEMA::atracciones TO rol_importador;
+DENY INSERT ON SCHEMA::concesiones TO rol_importador;
+
+DENY UPDATE ON SCHEMA::ventas      TO rol_importador;
+DENY UPDATE ON SCHEMA::atracciones TO rol_importador;
+DENY UPDATE ON SCHEMA::concesiones TO rol_importador;
+
+DENY DELETE ON SCHEMA::ventas      TO rol_importador;
+DENY DELETE ON SCHEMA::maestros    TO rol_importador;
+DENY DELETE ON SCHEMA::parques     TO rol_importador;
+DENY DELETE ON SCHEMA::atracciones TO rol_importador;
+DENY DELETE ON SCHEMA::concesiones TO rol_importador;
+DENY DELETE ON SCHEMA::importacion TO rol_importador;
+
+-- SELECT e INSERT/UPDATE en maestros, parques e importacion:
+-- no se otorga ni deniega (los SPs los necesitan internamente)
 GO
 
-/*
+
 -- CREACION DE LOGINS Y USUARIOS
--- Un login por rol para demostrar la asignacion
-*/
 
--- Login administrador
 CREATE LOGIN usr_admin
-    WITH PASSWORD      = 'Admin2026!',
+    WITH PASSWORD        = 'Admin2026!',
          DEFAULT_DATABASE = ParquesNacionalesDB,
          CHECK_EXPIRATION = OFF,
          CHECK_POLICY     = ON;
@@ -139,9 +182,8 @@ GO
 ALTER ROLE rol_admin ADD MEMBER usr_admin;
 GO
 
--- Login ventas
 CREATE LOGIN usr_ventas
-    WITH PASSWORD      = 'Ventas2026!',
+    WITH PASSWORD        = 'Ventas2026!',
          DEFAULT_DATABASE = ParquesNacionalesDB,
          CHECK_EXPIRATION = OFF,
          CHECK_POLICY     = ON;
@@ -151,9 +193,8 @@ GO
 ALTER ROLE rol_ventas ADD MEMBER usr_ventas;
 GO
 
--- Login consulta
 CREATE LOGIN usr_consulta
-    WITH PASSWORD      = 'Consulta2026!',
+    WITH PASSWORD        = 'Consulta2026!',
          DEFAULT_DATABASE = ParquesNacionalesDB,
          CHECK_EXPIRATION = OFF,
          CHECK_POLICY     = ON;
@@ -163,9 +204,8 @@ GO
 ALTER ROLE rol_consulta ADD MEMBER usr_consulta;
 GO
 
--- Login importador
 CREATE LOGIN usr_importador
-    WITH PASSWORD      = 'Import2026!',
+    WITH PASSWORD        = 'Import2026!',
          DEFAULT_DATABASE = ParquesNacionalesDB,
          CHECK_EXPIRATION = OFF,
          CHECK_POLICY     = ON;
@@ -174,3 +214,37 @@ CREATE USER usr_importador FOR LOGIN usr_importador;
 GO
 ALTER ROLE rol_importador ADD MEMBER usr_importador;
 GO
+
+-- VERIFICACION: permisos efectivos por rol
+
+SELECT
+    dp.name             AS rol,
+    o.name              AS sp_nombre,
+    p.permission_name   AS permiso,
+    p.state_desc        AS estado
+FROM sys.database_permissions p
+JOIN sys.database_principals dp ON dp.principal_id = p.grantee_principal_id
+LEFT JOIN sys.objects o         ON o.object_id      = p.major_id
+WHERE dp.name IN ('rol_admin','rol_ventas','rol_consulta','rol_importador')
+ORDER BY dp.name, p.permission_name, o.name;
+GO
+
+
+
+
+
+ 
+SELECT
+    s.name  AS schema_nombre,
+    o.name  AS sp_nombre,
+    o.type_desc
+FROM sys.objects o
+JOIN sys.schemas s ON s.schema_id = o.schema_id
+WHERE o.type = 'P'
+  AND o.is_ms_shipped = 0
+ORDER BY s.name, o.name;
+-- Resultado esperado: ninguna fila con schema_nombre = 'dbo'
+-- Todos los SPs deben aparecer bajo maestros, parques, ventas,
+-- atracciones, concesiones, importacion o negocio.
+GO
+
