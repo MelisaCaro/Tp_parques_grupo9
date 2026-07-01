@@ -69,7 +69,7 @@ VALUES (2, 2, '2026-12-01'); -- , Iguazu, fecha futura
 
 EXEC sp_VentaEntradas
     @idPuntoVenta     = 1,
-    @nroTicket        = 8002,
+
     @idFormaPago      = 1,
     @moneda           = 'USD',
     @tipoCambio       = 1,    -- <-- default: el SP consulta la API automaticamente
@@ -123,7 +123,6 @@ VALUES (1, 2, '2026-12-01'); -- Juan Perez, Iguazu
 
 EXEC sp_VentaEntradas
     @idPuntoVenta = 1,
-    @nroTicket    = 8003,
     @idFormaPago  = 1,
     @moneda       = 'ARS',
     @entradas     = @entradas2;
@@ -152,7 +151,6 @@ BEGIN TRY
 
     EXEC sp_VentaEntradas
         @idPuntoVenta = 1,
-        @nroTicket    = 8004,
         @idFormaPago  = 1,
         @moneda       = 'USD',
         @tipoCambio   = 0,   -- invalido
