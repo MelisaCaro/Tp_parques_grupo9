@@ -1358,18 +1358,3 @@ BEGIN
         @entradas             = @entradas;
 END
 GO
-
--- GRANT para rol_ventas
-GRANT EXECUTE ON OBJECT::dbo.sp_VentaEntradaSimple TO rol_ventas;
-GO
-
-EXECUTE AS USER = 'usr_ventas';
-    EXEC sp_VentaEntradaSimple
-        @idPuntoVenta = 1,
-        @idFormaPago  = 1,
-        @idVisitante  = 1,
-        @idParque     = 1,
-        @fechaAcceso  = '2026-12-01';
-REVERT;
-GO
--- Resultado esperado: ticket registrado sin errores de permisos
