@@ -189,6 +189,8 @@ GO
 
 GRANT EXECUTE ON OBJECT::dbo.sp_ImportarWDPA   TO rol_importador;
 GRANT EXECUTE ON OBJECT::dbo.sp_Importar_APRN  TO rol_importador;
+GRANT EXECUTE ON OBJECT::dbo.sp_ImportarGeoJSONAreasProtegidas TO rol_importador;
+
 
 DENY INSERT ON SCHEMA::ventas      TO rol_importador;
 DENY INSERT ON SCHEMA::atracciones TO rol_importador;
