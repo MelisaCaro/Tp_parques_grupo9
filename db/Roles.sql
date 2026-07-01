@@ -110,7 +110,8 @@ GRANT EXECUTE ON OBJECT::dbo.sp_Visitante_Insertar    TO rol_ventas;
 GRANT EXECUTE ON OBJECT::dbo.sp_Visitante_Actualizar  TO rol_ventas;
 GRANT EXECUTE ON OBJECT::dbo.sp_PuntoVenta_Insertar   TO rol_ventas;
 GRANT EXECUTE ON OBJECT::dbo.sp_PuntoVenta_Actualizar TO rol_ventas;
- 
+GRANT EXECUTE ON OBJECT::dbo.sp_VentaEntradaSimple TO rol_ventas;
+
 -- SELECT solo sobre las tablas necesarias para operar la pantalla de ventas
 GRANT SELECT ON ventas.Visitante     TO rol_ventas;
 GRANT SELECT ON parques.Parque       TO rol_ventas;
