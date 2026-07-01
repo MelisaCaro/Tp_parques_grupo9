@@ -49,6 +49,24 @@ GO
 --   cada combinacion (parque, tipo de visitante, fecha).
 -- ============================================================
  
+ use ParquesNacionalesDB
+ 
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('ventas.Ticket') AND name = 'fuenteTipoCambio'
+)
+    ALTER TABLE ventas.Ticket
+        ADD fuenteTipoCambio VARCHAR(100) NULL;
+GO
+ 
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('ventas.Ticket') AND name = 'totalUSD'
+)
+    ALTER TABLE ventas.Ticket
+        ADD totalUSD DECIMAL(12,2) NULL;
+GO
+
 -- Primero creamos el tipo de tabla para pasar el detalle de entradas
 IF NOT EXISTS (
     SELECT 1 FROM sys.types WHERE name = 'TipoEntradaDetalle' AND is_table_type = 1
@@ -62,8 +80,7 @@ BEGIN
 END
 GO
  
-CREATE PROCEDURE sp_VentaEntradas
-    -- Cabecera del ticket
+CREATE or ALTER PROCEDURE sp_VentaEntradas
     @idPuntoVenta         INT,
     @nroTicket            INT,
     @tipoComprobante      VARCHAR(50)   = 'Ticket',
@@ -73,17 +90,17 @@ CREATE PROCEDURE sp_VentaEntradas
     @fechaEmision         DATE          = NULL,
     @moneda               VARCHAR(10)   = 'ARS',
     @tipoCambio           DECIMAL(10,4) = 1,
-    -- Detalle de entradas
+    @fuenteTipoCambio     VARCHAR(100)  = NULL,
     @entradas             dbo.TipoEntradaDetalle READONLY
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @errores    VARCHAR(MAX) = '';
-    DECLARE @idTicket   INT;
-    DECLARE @idItem     INT;
-    DECLARE @totalTicket DECIMAL(12,2) = 0;
+    DECLARE @errores     VARCHAR(MAX)  = '';
+    DECLARE @idTicket    INT;
+    DECLARE @idItem      INT;
+    DECLARE @totalARS    DECIMAL(12,2) = 0;
+    DECLARE @totalUSD    DECIMAL(12,2) = NULL;
  
-    -- Fecha de emision por defecto = hoy
     IF @fechaEmision IS NULL
         SET @fechaEmision = CAST(GETDATE() AS DATE);
  
@@ -98,9 +115,20 @@ BEGIN
         SET @errores += '- Debe incluir al menos una entrada.' + CHAR(13);
     IF @tipoCambio <= 0
         SET @errores += '- El tipo de cambio debe ser mayor a cero.' + CHAR(13);
+    IF @moneda NOT IN ('ARS', 'USD')
+        SET @errores += '- La moneda debe ser ARS o USD.' + CHAR(13);
+ 
+    -- Si paga en USD, el tipo de cambio tiene que ser el real (no el default 1)
+    IF @moneda = 'USD' AND @tipoCambio = 1
+        SET @errores += '- Para pagos en USD debe indicar el tipo de cambio real '
+                      + '(obtenido de dolarapi.com). El valor 1 no es valido.' + CHAR(13);
  
     -- ---- Validaciones de cada entrada ----
-    DECLARE @idVisitante INT, @idParque INT, @fechaAcceso DATE, @idPrecio INT, @monto DECIMAL(12,2);
+    DECLARE @idVisitante     INT;
+    DECLARE @idParque        INT;
+    DECLARE @fechaAcceso     DATE;
+    DECLARE @idPrecio        INT;
+    DECLARE @monto           DECIMAL(12,2);
     DECLARE @idTipoVisitante INT;
  
     DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
@@ -115,20 +143,22 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM parques.Parque WHERE idParque = @idParque AND activo = 1)
             SET @errores += '- Parque ID ' + CAST(@idParque AS VARCHAR) + ' no existe o no esta activo.' + CHAR(13);
         IF @fechaAcceso < @fechaEmision
-            SET @errores += '- La fecha de acceso (' + CAST(@fechaAcceso AS VARCHAR) + ') no puede ser anterior a la fecha de emision.' + CHAR(13);
+            SET @errores += '- La fecha de acceso (' + CAST(@fechaAcceso AS VARCHAR)
+                          + ') no puede ser anterior a la fecha de emision.' + CHAR(13);
  
-        -- Buscar precio vigente
-        SELECT @idTipoVisitante = idTipoVisitante FROM ventas.Visitante WHERE idVisitante = @idVisitante;
+        SELECT @idTipoVisitante = idTipoVisitante
+        FROM ventas.Visitante
+        WHERE idVisitante = @idVisitante;
  
         IF NOT EXISTS (
             SELECT 1 FROM ventas.PrecioEntrada
-            WHERE idParque = @idParque
+            WHERE idParque        = @idParque
               AND idTipoVisitante = @idTipoVisitante
-              AND vigenciaDesde <= @fechaAcceso
+              AND vigenciaDesde  <= @fechaAcceso
               AND (vigenciaHasta IS NULL OR vigenciaHasta >= @fechaAcceso)
         )
-            SET @errores += '- No existe precio vigente para el visitante ID ' + CAST(@idVisitante AS VARCHAR)
-                          + ' en el parque ID ' + CAST(@idParque AS VARCHAR)
+            SET @errores += '- No existe precio vigente para visitante ID ' + CAST(@idVisitante AS VARCHAR)
+                          + ' en parque ID ' + CAST(@idParque AS VARCHAR)
                           + ' para la fecha ' + CAST(@fechaAcceso AS VARCHAR) + '.' + CHAR(13);
  
         FETCH NEXT FROM cur INTO @idVisitante, @idParque, @fechaAcceso;
@@ -149,10 +179,12 @@ BEGIN
         -- 1. Crear cabecera del ticket
         INSERT INTO ventas.Ticket
             (idPuntoVenta, nroTicket, tipoComprobante, compradorNombreRazon,
-             compradorCultDni, idFormaPago, fechaEmision, total, moneda, tipoCambio, estado)
+             compradorCultDni, idFormaPago, fechaEmision, total, moneda,
+             tipoCambio, fuenteTipoCambio, totalUSD, estado)
         VALUES
             (@idPuntoVenta, @nroTicket, @tipoComprobante, @compradorNombreRazon,
-             @compradorCuitDni, @idFormaPago, @fechaEmision, 0, @moneda, @tipoCambio, 'Emitido');
+             @compradorCuitDni, @idFormaPago, @fechaEmision, 0, @moneda,
+             @tipoCambio, @fuenteTipoCambio, NULL, 'Emitido');
  
         SET @idTicket = SCOPE_IDENTITY();
  
@@ -164,7 +196,6 @@ BEGIN
         FETCH NEXT FROM cur2 INTO @idVisitante, @idParque, @fechaAcceso;
         WHILE @@FETCH_STATUS = 0
         BEGIN
-            -- Obtener tipo de visitante y precio vigente
             SELECT @idTipoVisitante = idTipoVisitante
             FROM ventas.Visitante
             WHERE idVisitante = @idVisitante;
@@ -179,30 +210,50 @@ BEGIN
               AND (vigenciaHasta IS NULL OR vigenciaHasta >= @fechaAcceso)
             ORDER BY vigenciaDesde DESC;
  
-            -- Insertar ItemTicket
             INSERT INTO ventas.ItemTicket (idTicket, cantidad, precioUnitario, subtotal)
             VALUES (@idTicket, 1, @monto, @monto);
  
             SET @idItem = SCOPE_IDENTITY();
  
-            -- Insertar Entrada
             INSERT INTO ventas.Entrada
                 (idItem, idVisitante, idParque, idPrecio, fechaAcceso, montoPagado, estado)
             VALUES
                 (@idItem, @idVisitante, @idParque, @idPrecio, @fechaAcceso, @monto, 'Activa');
  
-            SET @totalTicket += @monto;
+            SET @totalARS += @monto;
  
             FETCH NEXT FROM cur2 INTO @idVisitante, @idParque, @fechaAcceso;
         END
         CLOSE cur2;
         DEALLOCATE cur2;
  
-        -- 3. Actualizar total del ticket
-        UPDATE ventas.Ticket SET total = @totalTicket WHERE idTicket = @idTicket;
+        -- 3. Calcular equivalente en USD si el visitante paga en dolares
+        --    totalARS es lo que cuesta en pesos (precio base)
+        --    totalUSD es lo que el visitante tiene que entregar en dolares
+        IF @moneda = 'USD'
+            SET @totalUSD = ROUND(@totalARS / @tipoCambio, 2);
+ 
+        -- 4. Actualizar totales en el ticket
+        UPDATE ventas.Ticket
+        SET total    = @totalARS,
+            totalUSD = @totalUSD
+        WHERE idTicket = @idTicket;
  
         COMMIT TRANSACTION;
-        SELECT @idTicket AS idTicket, @totalTicket AS totalTicket;
+ 
+        -- Resumen del ticket
+        SELECT
+            @idTicket   AS idTicket,
+            @totalARS   AS totalARS,
+            @totalUSD   AS totalUSD,
+            @tipoCambio AS tipoCambioUsado,
+            ISNULL(@fuenteTipoCambio, 'Manual')  AS fuenteTipoCambio,
+            CASE
+                WHEN @moneda = 'USD'
+                THEN 'El visitante paga USD ' + CAST(@totalUSD AS VARCHAR)
+                   + ' (equivale a ARS ' + CAST(@totalARS AS VARCHAR) + ')'
+                ELSE 'El visitante paga ARS ' + CAST(@totalARS AS VARCHAR)
+            END AS resumen;
  
     END TRY
     BEGIN CATCH
@@ -212,8 +263,23 @@ BEGIN
     END CATCH
 END
 GO
+
+
+ DECLARE @entradas dbo.TipoEntradaDetalle;
+INSERT INTO @entradas VALUES (3, 2, GETDATE()); -- idVisitante=3 (John Smith), idParque=2 (Iguazu)
+
+ EXEC sp_VentaEntradas
+     @idPuntoVenta     = 1,
+    @nroTicket        = 999,
+     @idFormaPago      = 1,
+    @moneda           = 'USD',
+     @tipoCambio       = 1250.00,
+     @fuenteTipoCambio = 'dolarapi.com - Dolar Blue',
+     @entradas         = @entradas;
  
  
+
+
 -- ============================================================
 -- SP: sp_ContratarActividad
 -- Descripcion: Registra la contratacion de un tour por parte
@@ -901,3 +967,409 @@ WITH (
 
 SELECT COUNT(*) AS filas FROM importacion.STG_APRN;
 SELECT TOP 3 * FROM importacion.STG_APRN;
+
+sp_configure 'show advanced options', 1;
+RECONFIGURE;
+GO
+sp_configure 'Ole Automation Procedures', 1;
+RECONFIGURE;
+GO
+
+
+/*
+============================================================
+  Fecha:       01/07/2026
+  Descripcion: SP auxiliar que consume la API de tipo de cambio
+               dolarapi.com directamente desde T-SQL usando
+               Ole Automation Procedures.
+               Retorna el tipo de cambio del Dolar Blue (venta).
+               Es llamado desde sp_VentaEntradas cuando
+               la moneda es USD.
+
+  Prerequisito:
+    Ole Automation Procedures debe estar habilitado:
+      sp_configure 'Ole Automation Procedures', 1;
+      RECONFIGURE;
+
+  Uso:
+    DECLARE @tc DECIMAL(10,4), @fuente VARCHAR(100);
+    EXEC sp_ObtenerTipoCambioDolar @tipoCambio = @tc OUTPUT,
+                                   @fuente     = @fuente OUTPUT;
+    SELECT @tc, @fuente;
+============================================================
+*/
+
+USE ParquesNacionalesDB;
+GO
+
+IF OBJECT_ID('dbo.sp_ObtenerTipoCambioDolar', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.sp_ObtenerTipoCambioDolar;
+GO
+ 
+CREATE PROCEDURE sp_ObtenerTipoCambioDolar
+    @tipoCambio DECIMAL(10,4) OUTPUT,
+    @fuente     VARCHAR(100)  OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+ 
+    DECLARE @obj        INT;
+    DECLARE @respuesta  VARCHAR(8000);
+    DECLARE @hr         INT;
+    DECLARE @url        VARCHAR(500) = 'https://dolarapi.com/v1/dolares/blue';
+ 
+    -- Valores por defecto en caso de error
+    SET @tipoCambio = NULL;
+    SET @fuente     = 'dolarapi.com - Dolar Blue';
+ 
+    BEGIN TRY
+        -- Crear objeto WinHTTP
+        EXEC @hr = sp_OACreate 'WinHttp.WinHttpRequest.5.1', @obj OUT;
+        IF @hr <> 0
+        BEGIN
+            RAISERROR('No se pudo crear el objeto WinHTTP.', 16, 1);
+            RETURN;
+        END
+ 
+        -- Abrir conexion GET
+        EXEC @hr = sp_OAMethod @obj, 'Open', NULL, 'GET', @url, false;
+        IF @hr <> 0
+        BEGIN
+            EXEC sp_OADestroy @obj;
+            RAISERROR('No se pudo abrir la conexion HTTP.', 16, 1);
+            RETURN;
+        END
+ 
+        -- Enviar request
+        EXEC @hr = sp_OAMethod @obj, 'Send';
+        IF @hr <> 0
+        BEGIN
+            EXEC sp_OADestroy @obj;
+            RAISERROR('No se pudo enviar el request HTTP.', 16, 1);
+            RETURN;
+        END
+ 
+        -- Leer respuesta
+        EXEC @hr = sp_OAGetProperty @obj, 'ResponseText', @respuesta OUT;
+        IF @hr <> 0
+        BEGIN
+            EXEC sp_OADestroy @obj;
+            RAISERROR('No se pudo leer la respuesta HTTP.', 16, 1);
+            RETURN;
+        END
+ 
+        -- Limpiar objeto
+        EXEC sp_OADestroy @obj;
+ 
+        -- Parsear el campo "venta" del JSON
+        -- Respuesta ejemplo: {"casa":"blue","nombre":"Blue","compra":1480,"venta":1510,"fechaActualizacion":"2026-07-01T..."}
+        DECLARE @inicio INT;
+        DECLARE @fin    INT;
+        DECLARE @valor  VARCHAR(20);
+ 
+        SET @inicio = CHARINDEX('"venta":', @respuesta);
+        IF @inicio = 0
+        BEGIN
+            RAISERROR('No se encontro el campo venta en la respuesta de la API.', 16, 1);
+            RETURN;
+        END
+ 
+        SET @inicio = @inicio + LEN('"venta":');
+        SET @fin    = CHARINDEX(',', @respuesta, @inicio);
+        IF @fin = 0
+            SET @fin = CHARINDEX('}', @respuesta, @inicio);
+ 
+        SET @valor = LTRIM(RTRIM(SUBSTRING(@respuesta, @inicio, @fin - @inicio)));
+        SET @tipoCambio = TRY_CAST(@valor AS DECIMAL(10,4));
+ 
+        IF @tipoCambio IS NULL
+        BEGIN
+            RAISERROR('No se pudo convertir el tipo de cambio a numero.', 16, 1);
+            RETURN;
+        END
+ 
+    END TRY
+    BEGIN CATCH
+        IF @obj IS NOT NULL
+            EXEC sp_OADestroy @obj;
+        -- Si falla la API, retorna NULL para que el llamador decida
+        SET @tipoCambio = NULL;
+        SET @fuente     = 'dolarapi.com - Error al consultar';
+    END CATCH
+END
+GO
+ 
+
+-- Actualizar sp_VentaEntradas para que cuando @moneda = 'USD'
+-- y @tipoCambio = 1 (default), consulte la API automaticamente
+
+
+ALTER PROCEDURE sp_VentaEntradas
+    @idPuntoVenta         INT,
+    @tipoComprobante      VARCHAR(50)   = 'Ticket',
+    @compradorNombreRazon VARCHAR(200)  = NULL,
+    @compradorCuitDni     VARCHAR(30)   = NULL,
+    @idFormaPago          INT,
+    @fechaEmision         DATE          = NULL,
+    @moneda               VARCHAR(10)   = 'ARS',
+    @tipoCambio           DECIMAL(10,4) = 1,
+    @fuenteTipoCambio     VARCHAR(100)  = NULL,
+    @entradas             dbo.TipoEntradaDetalle READONLY
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @errores     VARCHAR(MAX)  = '';
+    DECLARE @idTicket    INT;
+    DECLARE @idItem      INT;
+    DECLARE @totalARS    DECIMAL(12,2) = 0;
+    DECLARE @totalUSD    DECIMAL(12,2) = NULL;
+    DECLARE @nroTicket   INT;
+ 
+    IF @fechaEmision IS NULL
+        SET @fechaEmision = CAST(GETDATE() AS DATE);
+ 
+    -- Generar nroTicket automaticamente por punto de venta
+    SELECT @nroTicket = ISNULL(MAX(nroTicket), 0) + 1
+    FROM ventas.Ticket
+    WHERE idPuntoVenta = @idPuntoVenta;
+ 
+    -- Si la moneda es USD y no se paso tipo de cambio,
+    -- consultarlo automaticamente desde la API
+    IF @moneda = 'USD' AND @tipoCambio = 1
+    BEGIN
+        EXEC sp_ObtenerTipoCambioDolar
+            @tipoCambio = @tipoCambio OUTPUT,
+            @fuente     = @fuenteTipoCambio OUTPUT;
+ 
+        IF @tipoCambio IS NULL
+        BEGIN
+            RAISERROR('No se pudo obtener el tipo de cambio desde dolarapi.com. Intente nuevamente o ingrese el valor manualmente.', 16, 1);
+            RETURN;
+        END
+    END
+ 
+    -- ---- Validaciones ----
+    IF NOT EXISTS (SELECT 1 FROM parques.PuntoVenta WHERE idPuntoVenta = @idPuntoVenta AND activo = 1)
+        SET @errores += '- El punto de venta no existe o no esta activo.' + CHAR(13);
+    IF NOT EXISTS (SELECT 1 FROM maestros.FormaPago WHERE idFormaPago = @idFormaPago)
+        SET @errores += '- La forma de pago indicada no existe.' + CHAR(13);
+    IF NOT EXISTS (SELECT 1 FROM @entradas)
+        SET @errores += '- Debe incluir al menos una entrada.' + CHAR(13);
+    IF @tipoCambio <= 0
+        SET @errores += '- El tipo de cambio debe ser mayor a cero.' + CHAR(13);
+    IF @moneda NOT IN ('ARS', 'USD')
+        SET @errores += '- La moneda debe ser ARS o USD.' + CHAR(13);
+ 
+    -- ---- Validaciones de cada entrada ----
+    DECLARE @idVisitante     INT;
+    DECLARE @idParque        INT;
+    DECLARE @fechaAcceso     DATE;
+    DECLARE @idPrecio        INT;
+    DECLARE @monto           DECIMAL(12,2);
+    DECLARE @idTipoVisitante INT;
+ 
+    DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
+        SELECT idVisitante, idParque, fechaAcceso FROM @entradas;
+ 
+    OPEN cur;
+    FETCH NEXT FROM cur INTO @idVisitante, @idParque, @fechaAcceso;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM ventas.Visitante WHERE idVisitante = @idVisitante)
+            SET @errores += '- Visitante ID ' + CAST(@idVisitante AS VARCHAR) + ' no existe.' + CHAR(13);
+        IF NOT EXISTS (SELECT 1 FROM parques.Parque WHERE idParque = @idParque AND activo = 1)
+            SET @errores += '- Parque ID ' + CAST(@idParque AS VARCHAR) + ' no existe o no esta activo.' + CHAR(13);
+        IF @fechaAcceso < @fechaEmision
+            SET @errores += '- La fecha de acceso no puede ser anterior a la fecha de emision.' + CHAR(13);
+ 
+        SELECT @idTipoVisitante = idTipoVisitante
+        FROM ventas.Visitante WHERE idVisitante = @idVisitante;
+ 
+        IF NOT EXISTS (
+            SELECT 1 FROM ventas.PrecioEntrada
+            WHERE idParque        = @idParque
+              AND idTipoVisitante = @idTipoVisitante
+              AND vigenciaDesde  <= @fechaAcceso
+              AND (vigenciaHasta IS NULL OR vigenciaHasta >= @fechaAcceso)
+        )
+            SET @errores += '- No existe precio vigente para visitante ID ' + CAST(@idVisitante AS VARCHAR)
+                          + ' en parque ID ' + CAST(@idParque AS VARCHAR) + '.' + CHAR(13);
+ 
+        FETCH NEXT FROM cur INTO @idVisitante, @idParque, @fechaAcceso;
+    END
+    CLOSE cur;
+    DEALLOCATE cur;
+ 
+    IF @errores <> ''
+    BEGIN
+        RAISERROR(@errores, 16, 1);
+        RETURN;
+    END
+ 
+    BEGIN TRANSACTION;
+    BEGIN TRY
+ 
+        INSERT INTO ventas.Ticket
+            (idPuntoVenta, nroTicket, tipoComprobante, compradorNombreRazon,
+             compradorCultDni, idFormaPago, fechaEmision, total, moneda,
+             tipoCambio, fuenteTipoCambio, totalUSD, estado)
+        VALUES
+            (@idPuntoVenta, @nroTicket, @tipoComprobante, @compradorNombreRazon,
+             @compradorCuitDni, @idFormaPago, @fechaEmision, 0, @moneda,
+             @tipoCambio, @fuenteTipoCambio, NULL, 'Emitido');
+ 
+        SET @idTicket = SCOPE_IDENTITY();
+ 
+        DECLARE cur2 CURSOR LOCAL FAST_FORWARD FOR
+            SELECT idVisitante, idParque, fechaAcceso FROM @entradas;
+ 
+        OPEN cur2;
+        FETCH NEXT FROM cur2 INTO @idVisitante, @idParque, @fechaAcceso;
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SELECT @idTipoVisitante = idTipoVisitante
+            FROM ventas.Visitante WHERE idVisitante = @idVisitante;
+ 
+            SELECT TOP 1
+                @idPrecio = idPrecioEntrada,
+                @monto    = monto
+            FROM ventas.PrecioEntrada
+            WHERE idParque        = @idParque
+              AND idTipoVisitante = @idTipoVisitante
+              AND vigenciaDesde  <= @fechaAcceso
+              AND (vigenciaHasta IS NULL OR vigenciaHasta >= @fechaAcceso)
+            ORDER BY vigenciaDesde DESC;
+ 
+            INSERT INTO ventas.ItemTicket (idTicket, cantidad, precioUnitario, subtotal)
+            VALUES (@idTicket, 1, @monto, @monto);
+ 
+            SET @idItem = SCOPE_IDENTITY();
+ 
+            INSERT INTO ventas.Entrada
+                (idItem, idVisitante, idParque, idPrecio, fechaAcceso, montoPagado, estado)
+            VALUES
+                (@idItem, @idVisitante, @idParque, @idPrecio, @fechaAcceso, @monto, 'Activa');
+ 
+            SET @totalARS += @monto;
+ 
+            FETCH NEXT FROM cur2 INTO @idVisitante, @idParque, @fechaAcceso;
+        END
+        CLOSE cur2;
+        DEALLOCATE cur2;
+ 
+        IF @moneda = 'USD'
+            SET @totalUSD = ROUND(@totalARS / @tipoCambio, 2);
+ 
+        UPDATE ventas.Ticket
+        SET total    = @totalARS,
+            totalUSD = @totalUSD
+        WHERE idTicket = @idTicket;
+ 
+        COMMIT TRANSACTION;
+ 
+        SELECT
+            @idTicket   AS idTicket,
+            @totalARS   AS totalARS,
+            @totalUSD   AS totalUSD,
+            @tipoCambio AS tipoCambio,
+            ISNULL(@fuenteTipoCambio, 'ARS - Sin conversion') AS fuenteTipoCambio,
+            CASE
+                WHEN @moneda = 'USD'
+                THEN 'El visitante paga USD ' + CAST(@totalUSD AS VARCHAR)
+                   + ' (equivale a ARS ' + CAST(@totalARS AS VARCHAR) + ')'
+                ELSE 'El visitante paga ARS ' + CAST(@totalARS AS VARCHAR)
+            END AS resumen;
+ 
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        DECLARE @msg VARCHAR(MAX) = ERROR_MESSAGE();
+        RAISERROR(@msg, 16, 1);
+    END CATCH
+END
+GO
+ 
+
+-- VERIFICACION: probar la API directamente
+
+DECLARE @tc     DECIMAL(10,4);
+DECLARE @fuente VARCHAR(100);
+
+EXEC sp_ObtenerTipoCambioDolar
+    @tipoCambio = @tc     OUTPUT,
+    @fuente     = @fuente OUTPUT;
+
+SELECT @tc AS tipoCambio, @fuente AS fuente;
+-- Resultado esperado: el valor actual del dolar blue y 'dolarapi.com - Dolar Blue'
+GO
+
+
+ /*
+============================================================
+
+  Fecha:       12/06/2026
+  Descripcion: SP auxiliar para registrar una venta de entrada
+               simple (un solo visitante) sin usar TVP.
+               Permite que la app Python llame al SP con
+               parametros simples en lugar de tabla tipo.
+               Internamente construye el TVP y llama a
+               sp_VentaEntradas.
+============================================================
+*/
+
+USE ParquesNacionalesDB;
+GO
+
+IF OBJECT_ID('dbo.sp_VentaEntradaSimple', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.sp_VentaEntradaSimple;
+GO
+
+CREATE PROCEDURE sp_VentaEntradaSimple
+    @idPuntoVenta         INT,
+    @idFormaPago          INT,
+    @idVisitante          INT,
+    @idParque             INT,
+    @fechaAcceso          DATE          = NULL,
+    @moneda               VARCHAR(10)   = 'ARS',
+    @tipoCambio           DECIMAL(10,4) = 1,
+    @fuenteTipoCambio     VARCHAR(100)  = NULL,
+    @compradorNombreRazon VARCHAR(200)  = NULL,
+    @compradorCuitDni     VARCHAR(30)   = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @fechaAcceso IS NULL
+        SET @fechaAcceso = CAST(GETDATE() AS DATE);
+
+    DECLARE @entradas dbo.TipoEntradaDetalle;
+    INSERT INTO @entradas (idVisitante, idParque, fechaAcceso)
+    VALUES (@idVisitante, @idParque, @fechaAcceso);
+
+    EXEC sp_VentaEntradas
+        @idPuntoVenta         = @idPuntoVenta,
+        @tipoComprobante      = 'Ticket',
+        @compradorNombreRazon = @compradorNombreRazon,
+        @compradorCuitDni     = @compradorCuitDni,
+        @idFormaPago          = @idFormaPago,
+        @moneda               = @moneda,
+        @tipoCambio           = @tipoCambio,
+        @fuenteTipoCambio     = @fuenteTipoCambio,
+        @entradas             = @entradas;
+END
+GO
+
+-- GRANT para rol_ventas
+GRANT EXECUTE ON OBJECT::dbo.sp_VentaEntradaSimple TO rol_ventas;
+GO
+
+EXECUTE AS USER = 'usr_ventas';
+    EXEC sp_VentaEntradaSimple
+        @idPuntoVenta = 1,
+        @idFormaPago  = 1,
+        @idVisitante  = 1,
+        @idParque     = 1,
+        @fechaAcceso  = '2026-12-01';
+REVERT;
+GO
+-- Resultado esperado: ticket registrado sin errores de permisos

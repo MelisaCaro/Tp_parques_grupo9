@@ -71,8 +71,17 @@ EXEC sp_Parque_Insertar 1, 'Quebrada del Condorito', 'Cordoba',                 
 EXEC sp_Parque_Insertar 4, 'Laguna de los Pozuelos', 'Jujuy',                            16000, 'Reserva de biosfera con flamencos y fauna altoandina';
 EXEC sp_Parque_Insertar 1, 'Los Alerces',            'Esquel, Chubut',                  263000, 'Bosques de alerces milenarios, Patrimonio UNESCO';
 GO
-
-
+UPDATE parques.Parque SET latitud = -41.0569, longitud = -71.5350 WHERE nombre = 'Nahuel Huapi';
+UPDATE parques.Parque SET latitud = -25.6868, longitud = -54.4444 WHERE nombre = 'Iguazu';
+UPDATE parques.Parque SET latitud = -50.3588, longitud = -73.0368 WHERE nombre = 'Los Glaciares';
+UPDATE parques.Parque SET latitud = -29.8261, longitud = -67.8736 WHERE nombre = 'Talampaya';
+UPDATE parques.Parque SET latitud = -31.8610, longitud = -58.2680 WHERE nombre = 'El Palmar';
+UPDATE parques.Parque SET latitud = -39.6237, longitud = -71.4697 WHERE nombre = 'Lanin';
+UPDATE parques.Parque SET latitud = -30.7041, longitud = -64.1023 WHERE nombre = 'Cerro Colorado';
+UPDATE parques.Parque SET latitud = -31.7167, longitud = -64.7167 WHERE nombre = 'Quebrada del Condorito';
+UPDATE parques.Parque SET latitud = -22.3833, longitud = -65.9833 WHERE nombre = 'Laguna de los Pozuelos';
+UPDATE parques.Parque SET latitud = -42.8833, longitud = -71.8333 WHERE nombre = 'Los Alerces';
+GO
 -- PUNTOS DE VENTA
 
 select*

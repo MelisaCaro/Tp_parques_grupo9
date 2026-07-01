@@ -90,7 +90,7 @@ CREATE TABLE maestros.FormaPago (
 -- ESQUEMA: parques
 -- Parque, Guardaparque, AsignacionParque, PuntoVenta*/
 
-CREATE TABLE parques.Parque (
+CREATE or alter TABLE parques.Parque (
     idParque      INT            IDENTITY(1,1) NOT NULL,
     idTipoParque  INT            NOT NULL,
     nombre        VARCHAR(200)   NOT NULL,
@@ -98,6 +98,10 @@ CREATE TABLE parques.Parque (
     superficieHa  DECIMAL(12,2)  NULL,
     descripcion   VARCHAR(1000)  NULL,
     activo        BIT            NOT NULL DEFAULT 1,
+	latitud DECIMAL(9,6) NULL,
+	longitud DECIMAL(9,6) NULL
+
+
     CONSTRAINT PK_Parque PRIMARY KEY (idParque),
     CONSTRAINT FK_Parque_TipoParque FOREIGN KEY (idTipoParque)
         REFERENCES maestros.TipoParque (idTipoParque),
@@ -185,7 +189,7 @@ CREATE TABLE ventas.PrecioEntrada (
         CHECK (vigenciaHasta IS NULL OR vigenciaHasta >= vigenciaDesde)
 );
 
-
+use ParquesNacionalesDB
 CREATE TABLE ventas.Ticket (
     idTicket               INT            IDENTITY(1,1) NOT NULL,
     idPuntoVenta           INT            NOT NULL,
@@ -199,6 +203,8 @@ CREATE TABLE ventas.Ticket (
     moneda                 VARCHAR(10)    NOT NULL DEFAULT 'ARS',
     tipoCambio             DECIMAL(10,4)  NOT NULL DEFAULT 1,
     estado                 VARCHAR(50)    NOT NULL DEFAULT 'Emitido',
+	fuenteTipoCambio VARCHAR(100) NULL,
+	totalUSD DECIMAL(12,2) NULL,
     CONSTRAINT PK_Ticket       PRIMARY KEY (idTicket),
     CONSTRAINT UQ_Ticket_pvNro UNIQUE (idPuntoVenta, nroTicket),
     CONSTRAINT FK_Ticket_PuntoVenta FOREIGN KEY (idPuntoVenta)
@@ -209,6 +215,7 @@ CREATE TABLE ventas.Ticket (
     CONSTRAINT CHK_Ticket_cambio CHECK (tipoCambio > 0),
     CONSTRAINT CHK_Ticket_estado CHECK (estado IN ('Emitido','Anulado'))
 );
+
 
 CREATE TABLE ventas.ItemTicket (
     idItem          INT            IDENTITY(1,1) NOT NULL,
