@@ -264,7 +264,7 @@ ALTER ROLE rol_importador ADD MEMBER usr_importador;
 GO
 
 -- VERIFICACION: permisos efectivos por rol
-
+/*
 SELECT
     dp.name             AS rol,
     o.name              AS sp_nombre,
@@ -276,4 +276,4 @@ LEFT JOIN sys.objects o         ON o.object_id      = p.major_id
 WHERE dp.name IN ('rol_admin','rol_ventas','rol_consulta','rol_importador')
 ORDER BY dp.name, p.permission_name, o.name;
 GO
-
+*/
