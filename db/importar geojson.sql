@@ -16,11 +16,12 @@
 
 USE ParquesNacionalesDB;
 GO
-
+/*
 -- Habilitar Ad Hoc Distributed Queries para OPENROWSET
 EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
 EXEC sp_configure 'Ad Hoc Distributed Queries', 1; RECONFIGURE;
 GO
+*/
 
 
 
@@ -39,12 +40,12 @@ BEGIN
     DECLARE @ok             INT = 0;
     DECLARE @errores        INT = 0;
     DECLARE @estadoFinal    VARCHAR(50);
-    DECLARE @jsonContent    VARCHAR(MAX);
+    DECLARE @jsonContent    NVARCHAR(MAX);
     DECLARE @sql            NVARCHAR(MAX);
  
-    -- ============================================================
+
     -- 1. Abrir registro en el log
-    -- ============================================================
+
     INSERT INTO importacion.ImportacionLog
         (idParque, fuente, formato, fechaEjecucion,
          registrosProcesados, registrosOk, registrosError, estado)
@@ -53,18 +54,35 @@ BEGIN
  
     SET @idImportacion = SCOPE_IDENTITY();
  
-    -- ============================================================
+ 
     -- 2. Leer el archivo GeoJSON completo con OPENROWSET
-    -- ============================================================
+
     BEGIN TRY
         SET @sql = N'
-            SELECT @json = BulkColumn
+            SELECT @json = CONVERT(NVARCHAR(MAX), BulkColumn)
             FROM OPENROWSET(BULK ''' + @rutaArchivo + ''',
-                SINGLE_CLOB,
-                CODEPAGE = ''65001''
+                SINGLE_CLOB
             ) AS j';
  
-        EXEC sp_executesql @sql, N'@json VARCHAR(MAX) OUTPUT', @json = @jsonContent OUTPUT;
+        EXEC sp_executesql @sql, N'@json NVARCHAR(MAX) OUTPUT', @json = @jsonContent OUTPUT;
+ 
+        -- Corregir encoding UTF-8 mal interpretado (caracteres latinos)
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã¡', 'á');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã©', 'é');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã­', 'í');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã³', 'ó');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ãº', 'ú');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã±', 'ñ');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã', 'Á');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã‰', 'É');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã"', 'Ó');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ãœ', 'Ü');
+        SET @jsonContent = REPLACE(@jsonContent, 'Â¡', '¡');
+        SET @jsonContent = REPLACE(@jsonContent, 'Â°', '°');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã¼', 'ü');
+        SET @jsonContent = REPLACE(@jsonContent, 'â€™', '''');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã‡', 'Ç');
+        SET @jsonContent = REPLACE(@jsonContent, 'Ã§', 'ç');
     END TRY
     BEGIN CATCH
         UPDATE importacion.ImportacionLog
@@ -77,11 +95,11 @@ BEGIN
         THROW;
     END CATCH
  
-    -- ============================================================
+  
     -- 3. Parsear features del GeoJSON con OPENJSON
     --    Extraer: nombre (fna), coordenadas del primer anillo
     --    del primer poligono para calcular el centroide.
-    -- ============================================================
+
     IF OBJECT_ID('tempdb..#AreasRaw') IS NOT NULL
         DROP TABLE #AreasRaw;
  
@@ -103,9 +121,9 @@ BEGIN
     WHERE JSON_VALUE(feature.value, '$.properties.fna') IS NOT NULL
       AND JSON_VALUE(feature.value, '$.geometry.type') IN ('Polygon', 'MultiPolygon');
  
-    -- ============================================================
+
     -- 4. Calcular centroide y hacer Upsert en parques.Parque
-    -- ============================================================
+
     DECLARE
         @nombre         NVARCHAR(500),
         @nombreCorto    NVARCHAR(300),
@@ -214,9 +232,8 @@ BEGIN
  
     DROP TABLE #AreasRaw;
  
-    -- ============================================================
     -- 5. Cerrar el log
-    -- ============================================================
+
     IF @errores = 0
         SET @estadoFinal = 'Completado';
     ELSE IF @ok > 0
@@ -244,6 +261,3 @@ GO
 -- Para ejecutar:
 /*EXEC sp_ImportarGeoJSONAreasProtegidas @rutaArchivo = 'C:\Datasets\area_protegida.geojson';
 */
-SELECT * from importacion.ImportacionLog
-
-select* from parques.Parque
