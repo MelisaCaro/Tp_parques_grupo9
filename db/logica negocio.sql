@@ -51,6 +51,103 @@ GO
  
  use ParquesNacionalesDB
  
+ 
+IF OBJECT_ID('dbo.sp_ObtenerTipoCambioDolar', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.sp_ObtenerTipoCambioDolar;
+GO
+ 
+create PROCEDURE sp_ObtenerTipoCambioDolar
+    @tipoCambio DECIMAL(10,4) OUTPUT,
+    @fuente     VARCHAR(100)  OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+ 
+    DECLARE @obj        INT;
+    DECLARE @respuesta  VARCHAR(8000);
+    DECLARE @hr         INT;
+    DECLARE @url        VARCHAR(500) = 'https://dolarapi.com/v1/dolares/blue';
+ 
+    -- Valores por defecto en caso de error
+    SET @tipoCambio = NULL;
+    SET @fuente     = 'dolarapi.com - Dolar Blue';
+ 
+    BEGIN TRY
+        -- Crear objeto WinHTTP
+        EXEC @hr = sp_OACreate 'WinHttp.WinHttpRequest.5.1', @obj OUT;
+        IF @hr <> 0
+        BEGIN
+            RAISERROR('No se pudo crear el objeto WinHTTP.', 16, 1);
+            RETURN;
+        END
+ 
+        -- Abrir conexion GET
+        EXEC @hr = sp_OAMethod @obj, 'Open', NULL, 'GET', @url, false;
+        IF @hr <> 0
+        BEGIN
+            EXEC sp_OADestroy @obj;
+            RAISERROR('No se pudo abrir la conexion HTTP.', 16, 1);
+            RETURN;
+        END
+ 
+        -- Enviar request
+        EXEC @hr = sp_OAMethod @obj, 'Send';
+        IF @hr <> 0
+        BEGIN
+            EXEC sp_OADestroy @obj;
+            RAISERROR('No se pudo enviar el request HTTP.', 16, 1);
+            RETURN;
+        END
+ 
+        -- Leer respuesta
+        EXEC @hr = sp_OAGetProperty @obj, 'ResponseText', @respuesta OUT;
+        IF @hr <> 0
+        BEGIN
+            EXEC sp_OADestroy @obj;
+            RAISERROR('No se pudo leer la respuesta HTTP.', 16, 1);
+            RETURN;
+        END
+ 
+        -- Limpiar objeto
+        EXEC sp_OADestroy @obj;
+ 
+        -- Parsear el campo "venta" del JSON
+        -- Respuesta ejemplo: {"casa":"blue","nombre":"Blue","compra":1480,"venta":1510,"fechaActualizacion":"2026-07-01T..."}
+        DECLARE @inicio INT;
+        DECLARE @fin    INT;
+        DECLARE @valor  VARCHAR(20);
+ 
+        SET @inicio = CHARINDEX('"venta":', @respuesta);
+        IF @inicio = 0
+        BEGIN
+            RAISERROR('No se encontro el campo venta en la respuesta de la API.', 16, 1);
+            RETURN;
+        END
+ 
+        SET @inicio = @inicio + LEN('"venta":');
+        SET @fin    = CHARINDEX(',', @respuesta, @inicio);
+        IF @fin = 0
+            SET @fin = CHARINDEX('}', @respuesta, @inicio);
+ 
+        SET @valor = LTRIM(RTRIM(SUBSTRING(@respuesta, @inicio, @fin - @inicio)));
+        SET @tipoCambio = TRY_CAST(@valor AS DECIMAL(10,4));
+ 
+        IF @tipoCambio IS NULL
+        BEGIN
+            RAISERROR('No se pudo convertir el tipo de cambio a numero.', 16, 1);
+            RETURN;
+        END
+ 
+    END TRY
+    BEGIN CATCH
+        IF @obj IS NOT NULL
+            EXEC sp_OADestroy @obj;
+        -- Si falla la API, retorna NULL para que el llamador decida
+        SET @tipoCambio = NULL;
+        SET @fuente     = 'dolarapi.com - Error al consultar';
+    END CATCH
+END
+GO
 IF NOT EXISTS (
     SELECT 1 FROM sys.columns
     WHERE object_id = OBJECT_ID('ventas.Ticket') AND name = 'fuenteTipoCambio'
@@ -265,20 +362,6 @@ BEGIN
 END
 GO
 
-
- DECLARE @entradas dbo.TipoEntradaDetalle;
-INSERT INTO @entradas VALUES (3, 2, GETDATE()); -- idVisitante=3 (John Smith), idParque=2 (Iguazu)
-
- EXEC sp_VentaEntradas
-     @idPuntoVenta     = 1,
-    @nroTicket        = 999,
-     @idFormaPago      = 1,
-    @moneda           = 'USD',
-     @tipoCambio       = 1250.00,
-     @fuenteTipoCambio = 'dolarapi.com - Dolar Blue',
-     @entradas         = @entradas;
- 
- 
 
 
 -- ============================================================
@@ -942,39 +1025,13 @@ BEGIN
         END AS estado;
 END
 GO
+/*
 SELECT * FROM importacion.STG_APRN;
 
 EXEC sp_Importar_APRN 'C:\Datasets\aprn_f_defensa_2026.csv'; --subo el archivo
+*/
 
-select* from importacion.ImportacionLog
-SELECT TOP 3 
-    nombre, 
-    hectareas,
-    ISNUMERIC(hectareas) AS es_numerico,
-    LEN(nombre) AS largo_nombre
-FROM importacion.STG_APRN;
 
---pruebo si carga algo
-TRUNCATE TABLE importacion.STG_APRN;
-
-BULK INSERT importacion.STG_APRN
-FROM 'C:\Datasets\aprn_f_defensa_2026.csv'
-WITH (
-    FIRSTROW        = 2,
-    FIELDTERMINATOR = ';',
-    ROWTERMINATOR   = '0x0a',
-    TABLOCK
-);
-
-SELECT COUNT(*) AS filas FROM importacion.STG_APRN;
-SELECT TOP 3 * FROM importacion.STG_APRN;
-
-sp_configure 'show advanced options', 1;
-RECONFIGURE;
-GO
-sp_configure 'Ole Automation Procedures', 1;
-RECONFIGURE;
-GO
 
 
 /*
@@ -1000,105 +1057,6 @@ GO
 ============================================================
 */
 
-USE ParquesNacionalesDB;
-GO
-
-IF OBJECT_ID('dbo.sp_ObtenerTipoCambioDolar', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.sp_ObtenerTipoCambioDolar;
-GO
- 
-create PROCEDURE sp_ObtenerTipoCambioDolar
-    @tipoCambio DECIMAL(10,4) OUTPUT,
-    @fuente     VARCHAR(100)  OUTPUT
-AS
-BEGIN
-    SET NOCOUNT ON;
- 
-    DECLARE @obj        INT;
-    DECLARE @respuesta  VARCHAR(8000);
-    DECLARE @hr         INT;
-    DECLARE @url        VARCHAR(500) = 'https://dolarapi.com/v1/dolares/blue';
- 
-    -- Valores por defecto en caso de error
-    SET @tipoCambio = NULL;
-    SET @fuente     = 'dolarapi.com - Dolar Blue';
- 
-    BEGIN TRY
-        -- Crear objeto WinHTTP
-        EXEC @hr = sp_OACreate 'WinHttp.WinHttpRequest.5.1', @obj OUT;
-        IF @hr <> 0
-        BEGIN
-            RAISERROR('No se pudo crear el objeto WinHTTP.', 16, 1);
-            RETURN;
-        END
- 
-        -- Abrir conexion GET
-        EXEC @hr = sp_OAMethod @obj, 'Open', NULL, 'GET', @url, false;
-        IF @hr <> 0
-        BEGIN
-            EXEC sp_OADestroy @obj;
-            RAISERROR('No se pudo abrir la conexion HTTP.', 16, 1);
-            RETURN;
-        END
- 
-        -- Enviar request
-        EXEC @hr = sp_OAMethod @obj, 'Send';
-        IF @hr <> 0
-        BEGIN
-            EXEC sp_OADestroy @obj;
-            RAISERROR('No se pudo enviar el request HTTP.', 16, 1);
-            RETURN;
-        END
- 
-        -- Leer respuesta
-        EXEC @hr = sp_OAGetProperty @obj, 'ResponseText', @respuesta OUT;
-        IF @hr <> 0
-        BEGIN
-            EXEC sp_OADestroy @obj;
-            RAISERROR('No se pudo leer la respuesta HTTP.', 16, 1);
-            RETURN;
-        END
- 
-        -- Limpiar objeto
-        EXEC sp_OADestroy @obj;
- 
-        -- Parsear el campo "venta" del JSON
-        -- Respuesta ejemplo: {"casa":"blue","nombre":"Blue","compra":1480,"venta":1510,"fechaActualizacion":"2026-07-01T..."}
-        DECLARE @inicio INT;
-        DECLARE @fin    INT;
-        DECLARE @valor  VARCHAR(20);
- 
-        SET @inicio = CHARINDEX('"venta":', @respuesta);
-        IF @inicio = 0
-        BEGIN
-            RAISERROR('No se encontro el campo venta en la respuesta de la API.', 16, 1);
-            RETURN;
-        END
- 
-        SET @inicio = @inicio + LEN('"venta":');
-        SET @fin    = CHARINDEX(',', @respuesta, @inicio);
-        IF @fin = 0
-            SET @fin = CHARINDEX('}', @respuesta, @inicio);
- 
-        SET @valor = LTRIM(RTRIM(SUBSTRING(@respuesta, @inicio, @fin - @inicio)));
-        SET @tipoCambio = TRY_CAST(@valor AS DECIMAL(10,4));
- 
-        IF @tipoCambio IS NULL
-        BEGIN
-            RAISERROR('No se pudo convertir el tipo de cambio a numero.', 16, 1);
-            RETURN;
-        END
- 
-    END TRY
-    BEGIN CATCH
-        IF @obj IS NOT NULL
-            EXEC sp_OADestroy @obj;
-        -- Si falla la API, retorna NULL para que el llamador decida
-        SET @tipoCambio = NULL;
-        SET @fuente     = 'dolarapi.com - Error al consultar';
-    END CATCH
-END
-GO
  
 
  /*
