@@ -3,7 +3,7 @@
   Universidad: Universidad Nacional de la Matanza
   Materia:     3641 - Bases de Datos Aplicada
   Grupo:       9
-  Integrantes: Caro, Melisa; Rolleri Villalba, Santino; Llanos, Franco; Vazquez, Nahuel Dominicano
+  Integrantes: Caro, Melisa; Rolleri Villalba, Santino; Llanos, Franco; Vazquez.
   Fecha:       12/06/2026
   Descripcion: Stored Procedures de reportes.
                Los reportes 2 y 5 retornan XML segun
