@@ -448,7 +448,6 @@ INSERT INTO @detalleEntradas VALUES (2, 1, '2026-12-15'); -- extranjero
  
 EXEC sp_VentaEntradas
     @idPuntoVenta    = 1,
-    @nroTicket       = 1001,
     @idFormaPago     = 1,
     @fechaEmision    = '2026-06-12',
     @entradas        = @detalleEntradas;
@@ -472,7 +471,7 @@ INSERT INTO @detalleEntradas2 VALUES (1, 1, '2026-12-16');
  
 EXEC sp_VentaEntradas
     @idPuntoVenta = 1,
-    @nroTicket    = 1001,   -- numero ya usado
+   -- numero ya usado
     @idFormaPago  = 1,
     @entradas     = @detalleEntradas2;
 GO
@@ -484,7 +483,7 @@ DECLARE @detalleVacio dbo.TipoEntradaDetalle;
  
 EXEC sp_VentaEntradas
     @idPuntoVenta = 1,
-    @nroTicket    = 1002,
+
     @idFormaPago  = 1,
     @entradas     = @detalleVacio;
 GO
@@ -497,7 +496,7 @@ INSERT INTO @detalleInvalido VALUES (9999, 1, '2026-12-15');
  
 EXEC sp_VentaEntradas
     @idPuntoVenta = 1,
-    @nroTicket    = 1003,
+
     @idFormaPago  = 1,
     @entradas     = @detalleInvalido;
 GO
@@ -510,7 +509,7 @@ INSERT INTO @detalleFechaInvalida VALUES (1, 1, '2026-01-01');
  
 EXEC sp_VentaEntradas
     @idPuntoVenta = 1,
-    @nroTicket    = 1004,
+
     @idFormaPago  = 1,
     @fechaEmision = '2026-06-12',
     @entradas     = @detalleFechaInvalida;
@@ -525,7 +524,6 @@ PRINT '--- TEST 10.1: Contratar actividad exitosamente (ticket nuevo) ---';
 -- Resultado esperado: OK - devuelve idTicket y montoTotal = 3000 (1 persona x 3000)
 EXEC sp_ContratarActividad
     @idPuntoVenta     = 1,
-    @nroTicket        = 2001,
     @idFormaPago      = 1,
     @idTour           = 1,
     @idVisitante      = 1,
@@ -556,7 +554,7 @@ PRINT '--- TEST 10.3: Contratar actividad con cupo insuficiente ---';
 -- (el tour tiene cupo = 8 luego de los tests anteriores, pedimos 20)
 EXEC sp_ContratarActividad
     @idPuntoVenta     = 1,
-    @nroTicket        = 2002,
+
     @idFormaPago      = 1,
     @idTour           = 1,
     @idVisitante      = 1,
@@ -567,7 +565,6 @@ PRINT '--- TEST 10.4: Contratar tour inexistente ---';
 -- Resultado esperado: ERROR - el tour no existe o no esta en estado Programado
 EXEC sp_ContratarActividad
     @idPuntoVenta     = 1,
-    @nroTicket        = 2003,
     @idFormaPago      = 1,
     @idTour           = 9999,
     @idVisitante      = 1,
