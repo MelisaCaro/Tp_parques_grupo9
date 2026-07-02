@@ -1509,10 +1509,3 @@ END
 GO
 
 
--- Verificacion
-
-SELECT idParque, nombre, latitud, longitud
-FROM parques.Parque
-WHERE latitud IS NOT NULL
-ORDER BY nombre;
-

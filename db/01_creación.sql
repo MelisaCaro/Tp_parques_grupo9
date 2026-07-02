@@ -10,9 +10,9 @@
                y configuracion inicial.
 ============================================================
 */
- 
 USE master;
 GO
+drop database ParquesNacionalesDB
  
 IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'ParquesNacionales')
 BEGIN
@@ -20,9 +20,6 @@ BEGIN
 END
 GO
 
- 
-CREATE DATABASE ParquesNacionalesDB;
-GO
  
 /*
 ============================================================
@@ -38,6 +35,12 @@ GO
 ============================================================
 */
 
+sp_configure 'show advanced options', 1; RECONFIGURE;
+GO
+sp_configure 'Ole Automation Procedures', 1; RECONFIGURE;
+GO
+sp_configure 'Ad Hoc Distributed Queries', 1; RECONFIGURE;
+GO
 USE ParquesNacionalesDB;
 GO
 
@@ -90,7 +93,7 @@ CREATE TABLE maestros.FormaPago (
 -- ESQUEMA: parques
 -- Parque, Guardaparque, AsignacionParque, PuntoVenta*/
 
-CREATE or alter TABLE parques.Parque (
+CREATE TABLE parques.Parque (
     idParque      INT            IDENTITY(1,1) NOT NULL,
     idTipoParque  INT            NOT NULL,
     nombre        VARCHAR(200)   NOT NULL,
