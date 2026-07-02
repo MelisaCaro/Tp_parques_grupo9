@@ -99,6 +99,11 @@ GRANT SELECT ON maestros.TipoVisitante TO rol_ventas;
 GRANT EXECUTE ON TYPE::dbo.TipoEntradaDetalle TO rol_ventas;
 GRANT EXECUTE ON OBJECT::dbo.sp_VentaEntradaSimple TO rol_ventas;
 GRANT SELECT ON maestros.TipoVisitante TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_ObtenerTipoCambioDolar TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_ObtenerTipoCambioDolar TO rol_ventas;
+GRANT EXECUTE ON OBJECT::dbo.sp_VentaEntradas          TO rol_ventas;
+
+GRANT SELECT ON ventas.PrecioEntrada TO rol_ventas;
 -- SPs de logica de negocio (estan en dbo)
 GRANT EXECUTE ON OBJECT::dbo.sp_VentaEntradas         TO rol_ventas;
 GRANT EXECUTE ON OBJECT::dbo.sp_ContratarActividad    TO rol_ventas;
@@ -271,26 +276,4 @@ LEFT JOIN sys.objects o         ON o.object_id      = p.major_id
 WHERE dp.name IN ('rol_admin','rol_ventas','rol_consulta','rol_importador')
 ORDER BY dp.name, p.permission_name, o.name;
 GO
-
-
-
-
-
- 
-SELECT
-    s.name  AS schema_nombre,
-    o.name  AS sp_nombre,
-    o.type_desc
-FROM sys.objects o
-JOIN sys.schemas s ON s.schema_id = o.schema_id
-WHERE o.type = 'P'
-  AND o.is_ms_shipped = 0
-ORDER BY s.name, o.name;
--- Resultado esperado: ninguna fila con schema_nombre = 'dbo'
--- Todos los SPs deben aparecer bajo maestros, parques, ventas,
--- atracciones, concesiones, importacion o negocio.
-GO
-
-
-
 
