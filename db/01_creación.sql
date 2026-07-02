@@ -4,7 +4,7 @@
   Universidad: Universidad nacional de la matanza
   Materia:     3641 - Bases de Datos Aplicada
   Grupo:       9
-  Integrantes: Caro, Melisa; Rolleri villalba Santino; Llanos Franco; Vazquez Nahuel Dominicano
+  Integrantes: Caro, Melisa; Rolleri villalba Santino; Llanos Franco.
   Fecha:       12/06/2026
   Descripcion: Creacion de la base de datos ParquesNacionales
                y configuracion inicial.
