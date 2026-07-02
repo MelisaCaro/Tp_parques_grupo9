@@ -640,3 +640,103 @@ EXEC sp_RegistrarPagoCanonYActualizarEstado 5, 3, '2026-06-10',  90000.00, 'REC-
 EXEC sp_RegistrarPagoCanonYActualizarEstado 9, 4, '2026-01-10',  85000.00, 'REC-007', '2026-01';
 EXEC sp_RegistrarPagoCanonYActualizarEstado 9, 4, '2026-02-10',  85000.00, 'REC-008', '2026-02';
 GO
+
+
+--Tipos de visitantes de los primeros 10 parques tienen precio cargado
+
+/*
+============================================================
+  Descripcion: Completa los precios faltantes para todos los
+               tipos de visitante en los 10 parques del seed.
+               Los parques 4-10 solo tenian precios para
+               Residente (1) y Extranjero (2).
+               Este script agrega Jubilado (3), Discapacidad (4)
+               y Estudiante (5) para todos los parques,
+               usando las mismas proporciones que los parques
+               1-3 del seed (50% del precio residente para
+               jubilados/discapacidad, gratuito para estudiantes).
+               Solo inserta si no existe (no duplica).
+============================================================
+*/
+
+USE ParquesNacionalesDB;
+GO
+
+-- ============================================================
+-- Parque 4 - Talampaya (residente=2000, extranjero=5000)
+-- ============================================================
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=4 AND idTipoVisitante=3)
+    EXEC sp_PrecioEntrada_Insertar 4, 3, 1000.00, '2026-01-01', NULL, 'ARS'; -- Jubilado
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=4 AND idTipoVisitante=4)
+    EXEC sp_PrecioEntrada_Insertar 4, 4, 1000.00, '2026-01-01', NULL, 'ARS'; -- Discapacidad
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=4 AND idTipoVisitante=5)
+    EXEC sp_PrecioEntrada_Insertar 4, 5,    0.00, '2026-01-01', NULL, 'ARS'; -- Estudiante
+GO
+
+-- ============================================================
+-- Parque 5 - El Palmar (residente=1500, extranjero=4000)
+-- ============================================================
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=5 AND idTipoVisitante=3)
+    EXEC sp_PrecioEntrada_Insertar 5, 3, 750.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=5 AND idTipoVisitante=4)
+    EXEC sp_PrecioEntrada_Insertar 5, 4, 750.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=5 AND idTipoVisitante=5)
+    EXEC sp_PrecioEntrada_Insertar 5, 5,   0.00, '2026-01-01', NULL, 'ARS';
+GO
+
+-- ============================================================
+-- Parque 6 - Lanin (residente=4000, extranjero=9000)
+-- ============================================================
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=6 AND idTipoVisitante=3)
+    EXEC sp_PrecioEntrada_Insertar 6, 3, 2000.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=6 AND idTipoVisitante=4)
+    EXEC sp_PrecioEntrada_Insertar 6, 4, 2000.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=6 AND idTipoVisitante=5)
+    EXEC sp_PrecioEntrada_Insertar 6, 5,    0.00, '2026-01-01', NULL, 'ARS';
+GO
+
+-- ============================================================
+-- Parque 7 - Cerro Colorado (residente=1000, extranjero=2500)
+-- ============================================================
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=7 AND idTipoVisitante=3)
+    EXEC sp_PrecioEntrada_Insertar 7, 3, 500.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=7 AND idTipoVisitante=4)
+    EXEC sp_PrecioEntrada_Insertar 7, 4, 500.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=7 AND idTipoVisitante=5)
+    EXEC sp_PrecioEntrada_Insertar 7, 5,   0.00, '2026-01-01', NULL, 'ARS';
+GO
+
+-- ============================================================
+-- Parque 8 - Quebrada del Condorito (residente=2500, extranjero=6000)
+-- ============================================================
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=8 AND idTipoVisitante=3)
+    EXEC sp_PrecioEntrada_Insertar 8, 3, 1250.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=8 AND idTipoVisitante=4)
+    EXEC sp_PrecioEntrada_Insertar 8, 4, 1250.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=8 AND idTipoVisitante=5)
+    EXEC sp_PrecioEntrada_Insertar 8, 5,    0.00, '2026-01-01', NULL, 'ARS';
+GO
+
+-- ============================================================
+-- Parque 9 - Laguna de los Pozuelos (residente=800, extranjero=2000)
+-- ============================================================
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=9 AND idTipoVisitante=3)
+    EXEC sp_PrecioEntrada_Insertar 9, 3, 400.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=9 AND idTipoVisitante=4)
+    EXEC sp_PrecioEntrada_Insertar 9, 4, 400.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=9 AND idTipoVisitante=5)
+    EXEC sp_PrecioEntrada_Insertar 9, 5,   0.00, '2026-01-01', NULL, 'ARS';
+GO
+
+-- ============================================================
+-- Parque 10 - Los Alerces (residente=3000, extranjero=7000)
+-- ============================================================
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=10 AND idTipoVisitante=3)
+    EXEC sp_PrecioEntrada_Insertar 10, 3, 1500.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=10 AND idTipoVisitante=4)
+    EXEC sp_PrecioEntrada_Insertar 10, 4, 1500.00, '2026-01-01', NULL, 'ARS';
+IF NOT EXISTS (SELECT 1 FROM ventas.PrecioEntrada WHERE idParque=10 AND idTipoVisitante=5)
+    EXEC sp_PrecioEntrada_Insertar 10, 5,    0.00, '2026-01-01', NULL, 'ARS';
+GO
+
+
